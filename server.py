@@ -137,7 +137,9 @@ class Boards:
                 "warnings": sum(i["level"] == "warning" for i in c["issues"]),
                 "comments": sum(x.get("status") == "open" for x in washi.load_comments(self.path(n))),
             })
-        return {"version": version, "dirs": [str(d) for d in self.dirs()], "boards": boards}
+        # open tabs reload themselves when the viewer's own files change
+        viewer = max(int(f.stat().st_mtime) for f in STATIC.iterdir() if f.is_file())
+        return {"version": version, "viewer": viewer, "dirs": [str(d) for d in self.dirs()], "boards": boards}
 
 
 def make_handler(boards):
@@ -217,6 +219,11 @@ def make_handler(boards):
                 n = washi.send_comments(path, cur["name"], body.get("items") or [])
                 boards.bump()
                 return self.send(200, {"sent": n})
+            if u.path == "/api/relayout":
+                if not body.get("done"):
+                    washi.relayout(path, body.get("region"))
+                boards.bump()
+                return self.send(200, {"ok": True})
             if u.path == "/api/comments/reopen":
                 ok = washi.reopen_comment(path, str(body.get("id", "")))
                 boards.bump()

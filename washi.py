@@ -7,6 +7,7 @@
   washi resolve FILE ID [REPLY...]     mark a comment resolved, optionally with a reply
   washi reopen FILE ID                 put a resolved comment back on the agenda
   washi watch                          print comments as they're sent from the viewer (one line each)
+  washi relayout FILE [--region R1]    forget saved node positions (after a big restructure)
   washi shot NAME [--region R2] [--out PNG] [--port 4747]
                                        screenshot the live viewer to check the redraw
                                        (NAME is project/slug, or just slug when unambiguous)
@@ -18,6 +19,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import urllib.request
 from pathlib import Path
 
 SLUG = re.compile(r"^[a-z][a-z0-9-]*$")
@@ -508,6 +510,22 @@ def save_layout(path, positions, clipped, version):
     _write_json(layout_path(path), {"positions": positions, "clipped": clipped, "version": version})
 
 
+def relayout(path, region=None):
+    """Drop saved positions (all, or one region's nodes and their exits) so the next draw starts fresh."""
+    lay = load_layout(path)
+    pos = lay.get("positions", {})
+    if region:
+        shape, _ = parse(Path(path).read_text(encoding="utf-8"))
+        ids = {n["id"] for n in (shape or {}).get("nodes", []) if n.get("region") == region}
+        owner = lambda k: k.split("--")[1].split(".")[0] if "--" in k else k  # exit--<from>--<to>, back--<from>--<to>
+        keep = {k: v for k, v in pos.items() if owner(k) not in ids}
+    else:
+        keep = {}
+    dropped = len(pos) - len(keep)
+    save_layout(path, keep, lay.get("clipped", []), lay.get("version"))
+    return dropped
+
+
 def shot(args):
     name, region, out, port = args[0], None, None, 4747
     rest = args[1:]
@@ -540,6 +558,16 @@ def shot(args):
 def main(argv):
     if argv[:1] == ["watch"]:
         return watch()
+    if argv[:1] == ["relayout"] and len(argv) > 1:
+        region = argv[argv.index("--region") + 1] if "--region" in argv else None
+        print(f"forgot {relayout(argv[1], region)} positions" + (f" in {region}" if region else ""))
+        try:  # tell a running viewer to redraw
+            name = Path(argv[1]).resolve().parent.parent.name + "/" + Path(argv[1]).stem
+            req = urllib.request.Request("http://localhost:4747/api/relayout", json.dumps({"name": name, "done": True}).encode(), {"Content-Type": "application/json"})
+            urllib.request.urlopen(req, timeout=2)
+        except OSError:
+            pass
+        return 0
     if not argv or argv[0] not in ("check", "md", "shot", "comments", "resolve", "reopen") or len(argv) < 2:
         print(__doc__.strip())
         return 2

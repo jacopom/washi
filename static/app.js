@@ -88,6 +88,8 @@ function hashParams() {
 async function poll() {
   try {
     const s = await api('/api/state');
+    if (state.viewer && s.viewer !== state.viewer && !composing) return location.reload();
+    state.viewer = s.viewer;
     $('#conn').className = 'dot ok';
     state.dirs = s.dirs;
     state.boards = s.boards;
@@ -115,8 +117,8 @@ async function loadComments() {
   state.comments = state.name ? await api(`/api/comments?name=${q(state.name)}`).catch(() => []) : [];
 }
 
+// re-read every draw: the file is the source of truth, so `washi relayout` (or another tab) isn't overwritten
 async function loadPositions(name) {
-  if (positions.has(name)) return positions.get(name);
   const saved = await api(`/api/layout?name=${q(name)}`).catch(() => ({}));
   const m = new Map(Object.entries(saved.positions || {}));
   positions.set(name, m);
@@ -1170,6 +1172,7 @@ $('#play').addEventListener('click', () => {
 });
 
 $('#fit').addEventListener('click', fit);
+$('#relayout').addEventListener('click', () => api('/api/relayout', { name: state.name }));
 $('#z100').addEventListener('click', () => {
   const r = svg.getBoundingClientRect(), v = state.view, cx = r.width / 2, cy = r.height / 2;
   v.x = cx - (cx - v.x) / v.k;

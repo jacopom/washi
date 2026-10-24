@@ -66,7 +66,7 @@ You write it in a fixed JSON language; the viewer at http://localhost:4747 rende
 1. **Read comments first**: `washi comments <file>`. The user leaves them in the viewer, pinned to a node or a spot on the canvas. They are the agenda for the next version.
 2. Edit the JSON. One idea per save — each valid save is a version, and the viewer marks nodes added (green), changed (yellow) and removed (red dashed ghost) since the previous one.
 3. `washi check <file>` — errors mean the viewer keeps the last valid version. Warnings (dead buttons, unreached screens/cut-outs, unlabelled answers, nodes outside any slice) are design smells: fix or justify them. `render:` lines are text the viewer had to cut off — shorten it or widen the card (`w`).
-4. Look at the redraw before reporting: `washi shot <slug> [--region R2]` prints a PNG path; Read it. Check that what you meant is legible on the drawing, not just in the JSON.
+4. Look at the redraw before reporting: `washi shot <slug> [--region R2]` prints a PNG path; Read it. Check that what you meant is legible on the drawing, not just in the JSON. If a region came out tangled after a restructure (wires looping across it, nodes stuck in old spots), run `washi relayout <file> --region R2` and shoot again.
 5. Resolve what you addressed: `washi resolve <file> c3 "Split into two cut-outs in v14"` (`washi reopen <file> c3` undoes one). The user can also paste comments into the chat with the viewer's Copy / "Copy all for chat"; treat those the same way.
 6. Report: "Saved as v7, checks passing." then what changed in bold-led short paragraphs, a **Removed:** list if anything went, and **Decisions for you:** for anything you chose on the user's behalf. Don't re-describe the whole shape.
 
