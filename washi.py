@@ -5,6 +5,8 @@
   washi md FILE [--slice S1]           print the shape (or one slice of it) as a markdown plan
   washi comments FILE [--all]          list open comments left in the viewer (--all: resolved too)
   washi resolve FILE ID [REPLY...]     mark a comment resolved, optionally with a reply
+  washi reopen FILE ID                 put a resolved comment back on the agenda
+  washi watch                          print comments as they're sent from the viewer (one line each)
   washi shot NAME [--region R2] [--out PNG] [--port 4747]
                                        screenshot the live viewer to check the redraw
                                        (NAME is project/slug, or just slug when unambiguous)
@@ -416,10 +418,16 @@ def load_comments(path):
     return _read_json(comments_path(path), [])
 
 
-def add_comment(path, text, node=None, x=None, y=None, version=None):
+# where exactly a comment points: a spot on a card (dx/dy, the widget and list row under it),
+# or a dragged area (rect, relative to the card it overlaps most, plus what it covers)
+ANCHOR_KEYS = ("dx", "dy", "widget", "item", "rect", "covers")
+
+
+def add_comment(path, text, node=None, x=None, y=None, version=None, **anchor):
     cs = load_comments(path)
     n = max([int(c["id"][1:]) for c in cs if str(c.get("id", "")).startswith("c")] + [0]) + 1
     c = {"id": f"c{n}", "text": text, "node": node, "x": x, "y": y, "version": version, "ts": time.time(), "status": "open"}
+    c.update({k: anchor[k] for k in ANCHOR_KEYS if anchor.get(k) is not None})
     _write_json(comments_path(path), cs + [c])
     return c
 
@@ -429,6 +437,64 @@ def resolve_comment(path, cid, reply=None, version=None):
     for c in cs:
         if c["id"] == cid:
             c.update(status="resolved", reply=reply or c.get("reply"), resolvedIn=version)
+            _write_json(comments_path(path), cs)
+            return True
+    return False
+
+
+def comment_where(c):
+    if c.get("rect"):
+        return "area over " + " + ".join(c["covers"]) if c.get("covers") else "an area of the canvas"
+    if c.get("node"):
+        return "on " + " › ".join(str(x) for x in (c["node"], c.get("widget"), c.get("item")) if x)
+    return f"at ({round(c.get('x') or 0)}, {round(c.get('y') or 0)})"
+
+
+# "Send to Claude" in the viewer appends here; `washi watch` (run by Claude as a background monitor) tails it
+OUTBOX = Path.home() / ".washi" / "outbox.jsonl"
+
+
+def send_comments(path, name, items):
+    cs = load_comments(path)
+    by_id = {c["id"]: c for c in cs}
+    sent = []
+    for it in items:
+        c = by_id.get(str(it.get("id", "")))
+        if c and c.get("status") == "open":
+            c["sent"] = time.time()
+            sent.append({"shape": name, "file": str(path), "id": c["id"], "where": it.get("where") or comment_where(c), "text": c["text"]})
+    if sent:
+        _write_json(comments_path(path), cs)
+        OUTBOX.parent.mkdir(exist_ok=True)
+        with OUTBOX.open("a", encoding="utf-8") as f:
+            f.writelines(json.dumps(x, ensure_ascii=False) + "\n" for x in sent)
+    return len(sent)
+
+
+def watch():
+    OUTBOX.parent.mkdir(exist_ok=True)
+    OUTBOX.touch()
+    with OUTBOX.open(encoding="utf-8") as f:
+        f.seek(0, 2)
+        while True:
+            line = f.readline()
+            if not line:
+                time.sleep(0.5)
+                continue
+            try:
+                x = json.loads(line)
+            except ValueError:
+                continue
+            text = " ".join(x["text"].split())
+            print(f"{x['shape']} {x['id']} {x['where']}: {text}  [{x['file']}]", flush=True)
+
+
+def reopen_comment(path, cid):
+    cs = load_comments(path)
+    for c in cs:
+        if c["id"] == cid:
+            c.update(status="open", resolvedIn=None)
+            c.pop("sent", None)
             _write_json(comments_path(path), cs)
             return True
     return False
@@ -472,7 +538,9 @@ def shot(args):
 
 
 def main(argv):
-    if not argv or argv[0] not in ("check", "md", "shot", "comments", "resolve") or len(argv) < 2:
+    if argv[:1] == ["watch"]:
+        return watch()
+    if not argv or argv[0] not in ("check", "md", "shot", "comments", "resolve", "reopen") or len(argv) < 2:
         print(__doc__.strip())
         return 2
     cmd, args = argv[0], argv[1:]
@@ -481,7 +549,7 @@ def main(argv):
     if cmd == "comments":
         cs = [c for c in load_comments(args[0]) if "--all" in args or c.get("status") == "open"]
         for c in cs:
-            where = f"on {c['node']}" if c.get("node") else f"at ({round(c.get('x') or 0)}, {round(c.get('y') or 0)})"
+            where = comment_where(c)
             print(f"{c['id']} [{c['status']}] v{c.get('version')} {where}: {c['text']}" + (f"\n    reply: {c['reply']}" if c.get("reply") else ""))
         if not cs:
             print("no open comments")
@@ -489,6 +557,10 @@ def main(argv):
     if cmd == "resolve":
         ok = resolve_comment(args[0], args[1], " ".join(args[2:]) or None, len(list(history_dir(args[0]).glob("*.json"))))
         print("resolved" if ok else f"no comment {args[1]}")
+        return 0 if ok else 1
+    if cmd == "reopen":
+        ok = reopen_comment(args[0], args[1])
+        print("reopened" if ok else f"no comment {args[1]}")
         return 0 if ok else 1
     if cmd == "md":
         shape, issues = parse(Path(args[0]).read_text(encoding="utf-8"))

@@ -26,7 +26,10 @@ The first version was a classic graph of places, UI/code affordances and stores.
 - In shot mode the header is `display:none`, so the body grid must be a single row; a `0 1fr` template put the canvas in the 0px row and produced a negative zoom.
 - `[hidden] { display: none !important; }` is load-bearing: `#empty` has `display: grid`, which beats the `hidden` attribute, and the invisible overlay swallowed wheel/drag on the canvas.
 - Clipped text is collected while painting (`clip()` → `clipLog`), shown under Checks and saved with the layout so `washi check` can print `render:` lines.
-- Ghosts of removed nodes come from laying out the previous version (cached per `name:rev`) without saving positions.
+- Ghosts of removed nodes come from laying out the previous version (cached per `name:rev`) without saving positions. A ghost that overlaps a live node is dropped: drawn on top it hid the new card's text. It's still listed under "Since vN".
+- Comments reach Claude through an outbox: **Send to Claude** appends to `~/.washi/outbox.jsonl` and marks the comment `sent`. `washi watch` tails that file and prints one line per comment, and Claude runs it as a background Monitor, so each send lands in the chat as a notification. A web page can't write into a Claude Code session directly. Copy (clipboard) stays as the fallback. Open comments have no Resolve button: Claude resolves them when they're addressed. Resolved comments have Reopen.
+- Comment anchors: a click stores `node` + `dx/dy` relative to the card, so the pin follows the card when the layout changes. It also stores the widget under the cursor and, for lists, the row (`list` measure has an `item(ly)` hit test). Dragging in comment mode draws an area instead of panning. The area is stored relative to the card it overlaps most, along with a `covers` list ("Card › widget, widget") that's computed at creation, so the CLI and chat text don't need the layout.
+- After a big restructure, saved positions from the old version can pin a node somewhere silly. Clearing `positions` in `.history/<slug>.layout.json` gives a fresh layout.
 
 ## Checker
 - Errors stop rendering (viewer falls back to the last valid version with a banner); warnings are design smells only.

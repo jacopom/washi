@@ -196,6 +196,7 @@ dl.detail dd { margin: 0; }
 #bar select { height: 26px; font-size: 12px; }
 #canvas.commenting { cursor: crosshair; }
 .pin { cursor: pointer; }
+.c-area { fill: color-mix(in srgb, var(--focus) 7%, transparent); stroke: var(--focus); stroke-width: 1.4; stroke-dasharray: 5 4; pointer-events: none; }
 .pin circle { fill: var(--focus); stroke: #fff; stroke-width: 2; }
 .pin-t { font: 700 10px Inter; fill: #fff; }
 #composer {
@@ -213,6 +214,8 @@ dl.detail dd { margin: 0; }
 .cm .reply { margin-top: 4px; padding-left: 8px; border-left: 2px solid var(--hair); color: var(--ink-soft); }
 .tag.pinno { background: var(--focus); color: #fff; }
 button.mini { height: 22px; padding: 0 7px; font-size: 11px; flex: none; }
+.cm-acts { display: flex; flex-direction: column; gap: 4px; align-items: stretch; }
+h3 .h-act { float: right; margin-top: -5px; text-transform: none; letter-spacing: 0; font-weight: 500; }
 .list li.flash { border-color: var(--focus); box-shadow: 0 0 0 2px rgba(43, 94, 167, .25); }
 .list li.on { border-color: var(--ink); }
 details.resolved { margin-top: 8px; font-size: 12px; color: var(--muted); }

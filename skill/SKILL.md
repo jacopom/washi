@@ -61,11 +61,13 @@ You write it in a fixed JSON language; the viewer at http://localhost:4747 rende
 
 ## Loop: comments → save → check → look → report
 
+**Listen first.** At the start of a shaping session, run `washi watch` with the Monitor tool (description "Washi comments sent from the viewer", timeout 30 min, re-arm on expiry). The user presses **Send to Claude** in the viewer and each comment arrives in the chat as `<shape> <id> <where>: <text>  [<file>]`. `where` is precise: a card › widget › list row, or "area over …" for a dragged rectangle. Treat each one as the next agenda item, then resolve it when it's addressed. Open comments have no Resolve button; resolving is Claude's job.
+
 1. **Read comments first**: `washi comments <file>`. The user leaves them in the viewer, pinned to a node or a spot on the canvas. They are the agenda for the next version.
 2. Edit the JSON. One idea per save — each valid save is a version, and the viewer marks nodes added (green), changed (yellow) and removed (red dashed ghost) since the previous one.
 3. `washi check <file>` — errors mean the viewer keeps the last valid version. Warnings (dead buttons, unreached screens/cut-outs, unlabelled answers, nodes outside any slice) are design smells: fix or justify them. `render:` lines are text the viewer had to cut off — shorten it or widen the card (`w`).
 4. Look at the redraw before reporting: `washi shot <slug> [--region R2]` prints a PNG path; Read it. Check that what you meant is legible on the drawing, not just in the JSON.
-5. Resolve what you addressed: `washi resolve <file> c3 "Split into two cut-outs in v14"`.
+5. Resolve what you addressed: `washi resolve <file> c3 "Split into two cut-outs in v14"` (`washi reopen <file> c3` undoes one). The user can also paste comments into the chat with the viewer's Copy / "Copy all for chat"; treat those the same way.
 6. Report: "Saved as v7, checks passing." then what changed in bold-led short paragraphs, a **Removed:** list if anything went, and **Decisions for you:** for anything you chose on the user's behalf. Don't re-describe the whole shape.
 
 ## Shaping well

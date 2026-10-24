@@ -205,11 +205,20 @@ def make_handler(boards):
                 text = str(body.get("text", "")).strip()
                 if not text:
                     return self.send(400, {"error": "empty comment"})
-                c = washi.add_comment(path, text, body.get("node"), body.get("x"), body.get("y"), cur["revs"])
+                anchor = {k: body.get(k) for k in washi.ANCHOR_KEYS}
+                c = washi.add_comment(path, text, body.get("node"), body.get("x"), body.get("y"), cur["revs"], **anchor)
                 boards.bump()
                 return self.send(200, c)
             if u.path == "/api/comments/resolve":
                 ok = washi.resolve_comment(path, str(body.get("id", "")), body.get("reply"), cur["revs"])
+                boards.bump()
+                return self.send(200 if ok else 404, {"ok": ok})
+            if u.path == "/api/comments/send":
+                n = washi.send_comments(path, cur["name"], body.get("items") or [])
+                boards.bump()
+                return self.send(200, {"sent": n})
+            if u.path == "/api/comments/reopen":
+                ok = washi.reopen_comment(path, str(body.get("id", "")))
                 boards.bump()
                 return self.send(200 if ok else 404, {"ok": ok})
             if u.path == "/api/layout":

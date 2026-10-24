@@ -178,7 +178,7 @@ async function show(data, prev = null) {
       const v = pg.nodes.get(n.id), pr = pg.regions.get(n.region), cr = geo.regions.get(n.region);
       if (!v) return null;
       return { n, v: cr && pr ? { ...v, x: v.x - pr.x + cr.x, y: v.y - pr.y + cr.y } : v };
-    }).filter(Boolean);
+    }).filter(Boolean).filter(({ v }) => ![...geo.nodes.values()].some(o => overlaps(v, o)));
   }
   if (token !== state.renderToken) return;
   geoCache.set(`${state.name}:${state.rev}`, geo);
@@ -194,6 +194,9 @@ async function show(data, prev = null) {
   renderPanel();
   saveLayout();
 }
+
+// a ghost drawn over a live node reads as clutter; it's still listed under "Since vN"
+const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
 
 const removedNodes = (cur, prev) => {
   if (!prev) return [];
@@ -244,7 +247,7 @@ const WIDGET = {
   list(w, iw) {
     const lh = w.label ? 13 : 0, rows = w.items;
     return {
-      h: lh + rows.length * 19 + 2,
+      h: lh + rows.length * 19 + 2, item: ly => rows[Math.floor((ly - lh - 1) / 19)],
       paint: (x, y) => (w.label ? T(x, y + 9, w.label, 'w-small') : '') +
         `<rect x="${x}" y="${y + lh}" width="${iw}" height="${rows.length * 19 + 2}" rx="3" class="w-box"/>` +
         rows.map((r, i) => (i ? `<line x1="${x + 6}" x2="${x + iw - 6}" y1="${y + lh + 1 + i * 19}" y2="${y + lh + 1 + i * 19}" class="w-line"/>` : '') +
@@ -386,6 +389,7 @@ function buildBlock(n) {
     }
     return {
       w: W, h: capH + cardH + annH(anns), ports, cardW: W, capH,
+      widgets: ws.map(({ w, m, y: wy }) => ({ w, y: capH + wy, h: m.h, item: m.item })),
       // incoming flows each get their own port, spaced down the left edge from the title bar
       inPorts: k => Array.from({ length: k }, (_, i) =>
         capH + Math.min(n.type === 'screen' ? 16 + i * 12 : cardH / 2 + (i - (k - 1) / 2) * 12, cardH - 8)),
@@ -715,6 +719,7 @@ function draw() {
   state.comments.filter(c => c.status === 'open').forEach(c => {
     const p = commentPos(c);
     if (!p) return;
+    if (c.rect) parts.push(`<rect class="c-area" x="${p.x - c.rect.w}" y="${p.y}" width="${c.rect.w}" height="${c.rect.h}" rx="4"/>`);
     parts.push(`<g class="pin" data-cid="${esc(c.id)}" transform="translate(${p.x},${p.y})"><circle r="10"/>${T(0, 3.5, c.id.slice(1), 'pin-t', 'middle')}<title>${esc(c.text)}</title></g>`);
   });
 
@@ -723,8 +728,12 @@ function draw() {
   if (state.selected) focus(state.selected);
 }
 
+// pins sit on the exact spot (areas: their top-right corner), relative to the card so they follow it
 function commentPos(c) {
   const v = c.node && state.geo?.nodes.get(c.node);
+  const o = v ? { x: v.x, y: v.y } : { x: c.x ?? 0, y: c.y ?? 0 };
+  if (c.rect) return { x: o.x + c.rect.x + c.rect.w, y: o.y + c.rect.y };
+  if (v && typeof c.dx === 'number') return { x: v.x + c.dx, y: v.y + c.dy };
   if (v) return { x: v.x + (v.b.cardW || v.w) - 2, y: v.y + (v.b.capH || 0) + 2 };
   return typeof c.x === 'number' ? { x: c.x, y: c.y } : null;
 }
@@ -805,13 +814,14 @@ svg.addEventListener('wheel', e => {
 
 let drag = null;
 svg.addEventListener('pointerdown', e => {
-  drag = { x: e.clientX, y: e.clientY, vx: state.view.x, vy: state.view.y, moved: false };
+  drag = { x: e.clientX, y: e.clientY, vx: state.view.x, vy: state.view.y, moved: false, area: state.commenting && !composing };
   svg.setPointerCapture(e.pointerId);
 });
 svg.addEventListener('pointermove', e => {
   if (drag) {
     const dx = e.clientX - drag.x, dy = e.clientY - drag.y;
-    if (Math.abs(dx) + Math.abs(dy) > 3) { drag.moved = true; svg.classList.add('panning'); }
+    if (Math.abs(dx) + Math.abs(dy) > 3) { drag.moved = true; if (!drag.area) svg.classList.add('panning'); }
+    if (drag.area) return drag.moved && drawDraft(dragRect(e));
     state.view.x = drag.vx + dx;
     state.view.y = drag.vy + dy;
     applyView();
@@ -821,6 +831,11 @@ svg.addEventListener('pointermove', e => {
 });
 svg.addEventListener('pointerup', e => {
   const wasClick = drag && !drag.moved;
+  if (drag?.area && drag.moved) {
+    const r = dragRect(e);
+    drag = null;
+    return r.w > 6 && r.h > 6 ? openComposer(e, { rect: r }) : drawDraft(null);
+  }
   drag = null;
   svg.classList.remove('panning');
   if (!wasClick) return;
@@ -829,7 +844,7 @@ svg.addEventListener('pointerup', e => {
   const pin = el?.closest('.pin');
   if (pin) return showComment(pin.dataset.cid);
   const hit = el?.closest('.node');
-  if (state.commenting) return openComposer(e, hit && !hit.dataset.exit ? hit.dataset.id : null);
+  if (state.commenting) return openComposer(e, { point: toCanvas(e.clientX, e.clientY) });
   select(hit?.dataset.id || null, !!hit?.dataset.exit); // clicking an exit jumps to its target
 });
 svg.addEventListener('pointerleave', () => { if (!state.selected && !drag) focus(null); });
@@ -837,26 +852,72 @@ svg.addEventListener('pointerleave', () => { if (!state.selected && !drag) focus
 // ── comments ──────────────────────────────────────────────
 
 let composing = null;
-function openComposer(e, node) {
+
+const widgetName = w => String(w.label || w.text || w.title || w.who || w.id || w.type).slice(0, 48);
+const liveNodes = () => [...state.geo.nodes.values()].filter(v => v.n.type !== 'exit');
+
+function dragRect(e) {
+  const a = toCanvas(drag.x, drag.y), b = toCanvas(e.clientX, e.clientY);
+  return { x: Math.min(a.x, b.x), y: Math.min(a.y, b.y), w: Math.abs(a.x - b.x), h: Math.abs(a.y - b.y) };
+}
+function drawDraft(r) {
+  vp.querySelector('.c-draft')?.remove();
+  if (r) vp.insertAdjacentHTML('beforeend', `<rect class="c-area c-draft" x="${r.x}" y="${r.y}" width="${r.w}" height="${r.h}" rx="4"/>`);
+}
+
+// what's under a canvas point: the card, the widget and, in a list, the row
+function pointAnchor(p) {
+  const v = liveNodes().find(v => p.x >= v.x && p.x <= v.x + v.w && p.y >= v.y && p.y <= v.y + v.h);
+  if (!v) return { x: p.x, y: p.y };
+  const ly = p.y - v.y, hit = (v.b.widgets || []).find(x => ly >= x.y && ly <= x.y + x.h);
+  const item = hit?.item?.(ly - hit.y);
+  return { node: v.n.id, dx: p.x - v.x, dy: p.y - v.y, widget: hit ? widgetName(hit.w) : null, item: item || null };
+}
+
+// an area keeps the list of what it covers, and moves with the card it overlaps most
+function areaAnchor(r) {
+  const cov = liveNodes().map(v => {
+    const ix = Math.min(r.x + r.w, v.x + v.w) - Math.max(r.x, v.x), iy = Math.min(r.y + r.h, v.y + v.h) - Math.max(r.y, v.y);
+    return { v, a: ix > 0 && iy > 0 ? ix * iy : 0 };
+  }).filter(c => c.a > 0).sort((a, b) => b.a - a.a);
+  const covers = cov.map(({ v }) => {
+    const ws = (v.b.widgets || []).filter(x => v.y + x.y < r.y + r.h && v.y + x.y + x.h > r.y).map(x => widgetName(x.w));
+    const all = ws.length === (v.b.widgets || []).length;
+    return nodeName(v.n) + (ws.length && !all ? ` › ${ws.join(', ')}` : '');
+  });
+  const v = cov[0]?.v;
+  return v ? { node: v.n.id, rect: { x: r.x - v.x, y: r.y - v.y, w: r.w, h: r.h }, covers }
+    : { x: r.x, y: r.y, rect: { x: 0, y: 0, w: r.w, h: r.h }, covers };
+}
+
+function where(c) {
+  const n = c.node && state.geo?.byId.get(c.node);
+  if (c.rect) return c.covers?.length ? `area over ${c.covers.join(' + ')}` : 'an area of the canvas';
+  if (!c.node) return 'canvas';
+  return [n ? nodeName(n) : `${c.node} (gone)`, c.widget, c.item].filter(Boolean).join(' › ');
+}
+
+function openComposer(e, at) {
   const r = $('#stage').getBoundingClientRect();
-  composing = { node, ...toCanvas(e.clientX, e.clientY) };
+  composing = at.rect ? areaAnchor(at.rect) : pointAnchor(at.point);
   const box = $('#composer');
   box.hidden = false;
   box.style.left = `${Math.min(e.clientX - r.left, r.width - 300)}px`;
   box.style.top = `${Math.min(e.clientY - r.top + 8, r.height - 150)}px`;
-  $('#composer .on').textContent = node ? `on ${nodeName(state.geo.byId.get(node))}` : 'on the canvas';
+  $('#composer .on').textContent = where(composing).replace(/^(?!area)/, 'on ');
   const ta = $('#composer textarea');
   ta.value = '';
   ta.focus();
 }
 function closeComposer() {
   composing = null;
+  drawDraft(null);
   $('#composer').hidden = true;
 }
 async function saveComment() {
   const text = $('#composer textarea').value.trim();
   if (!text || !composing) return closeComposer();
-  await api('/api/comments', { name: state.name, text, node: composing.node, x: composing.x, y: composing.y });
+  await api('/api/comments', { name: state.name, text, ...composing });
   closeComposer();
   setCommenting(false);
   await loadComments();
@@ -967,15 +1028,18 @@ function renderPanel() {
 
   const open = state.comments.filter(c => c.status === 'open'), done = state.comments.filter(c => c.status !== 'open');
   if (state.comments.length) {
-    const where = c => c.node && byId.has(c.node) ? nodeName(byId.get(c.node)) : c.node ? `${c.node} (gone)` : 'canvas';
-    html += `<h3>Comments · ${open.length} open</h3><ul class="list">` + open.map(c =>
+    state.chatText = ids => `Washi comments on ${state.name} (v${state.rev}):\n` +
+      state.comments.filter(c => ids.includes(c.id)).map(c => `- ${c.id} ${where(c).replace(/^(?!area)/, 'on ')}: ${c.text.replace(/\n+/g, ' ')}`).join('\n');
+    const unsent = open.filter(c => !c.sent);
+    html += `<h3>Comments · ${open.length} open${unsent.length > 1 ? `<button class="mini h-act primary" data-send="${esc(unsent.map(c => c.id).join(' '))}">Send all to Claude</button>` : ''}</h3><ul class="list">` + open.map(c =>
       `<li class="cm" data-cid="${esc(c.id)}" data-sel="${esc(c.node || '')}"><span class="tag pinno">${esc(c.id.slice(1))}</span>` +
-      `<div class="cm-body">${esc(c.text)}<div class="none">${esc(where(c))} · v${c.version ?? '?'} · ${ago(c.ts)}</div></div>` +
-      `<button class="mini" data-resolve="${esc(c.id)}">Resolve</button></li>`).join('') + '</ul>';
+      `<div class="cm-body">${esc(c.text)}<div class="none">${esc(where(c))} · v${c.version ?? '?'} · ${ago(c.ts)}${c.sent ? ` · <b>sent to Claude ${ago(c.sent)}</b>` : ''}</div></div>` +
+      `<div class="cm-acts">${c.sent ? '' : `<button class="mini primary" data-send="${esc(c.id)}">Send to Claude</button>`}<button class="mini" data-chat="${esc(c.id)}">Copy</button></div></li>`).join('') + '</ul>';
     if (done.length) {
       html += `<details class="resolved"><summary>${done.length} resolved</summary><ul class="list">` + done.map(c =>
         `<li class="cm" data-sel="${esc(c.node || '')}"><span class="tag removed">${esc(c.id.slice(1))}</span><div class="cm-body">${esc(c.text)}` +
-        (c.reply ? `<div class="reply">${esc(c.reply)}</div>` : '') + `<div class="none">${esc(where(c))}${c.resolvedIn ? ` · resolved in v${c.resolvedIn}` : ''}</div></div></li>`).join('') + '</ul></details>';
+        (c.reply ? `<div class="reply">${esc(c.reply)}</div>` : '') + `<div class="none">${esc(where(c))}${c.resolvedIn ? ` · resolved in v${c.resolvedIn}` : ''}</div></div>` +
+        `<div class="cm-acts"><button class="mini" data-chat="${esc(c.id)}">Copy</button><button class="mini" data-reopen="${esc(c.id)}">Reopen</button></div></li>`).join('') + '</ul></details>';
     }
   }
 
@@ -1023,9 +1087,28 @@ function issuesHtml(issues) {
 }
 
 panel.addEventListener('click', async e => {
-  const res = e.target.closest('[data-resolve]');
+  const chat = e.target.closest('[data-chat]');
+  if (chat) {
+    const label = chat.textContent;
+    try {
+      await navigator.clipboard.writeText(state.chatText(chat.dataset.chat.split(' ')));
+      chat.textContent = 'Copied · paste in chat';
+    } catch {
+      chat.textContent = 'Failed';
+    }
+    return setTimeout(() => (chat.textContent = label), 1400);
+  }
+  const send = e.target.closest('[data-send]');
+  if (send) {
+    send.disabled = true;
+    const items = send.dataset.send.split(' ').map(id => ({ id, where: where(state.comments.find(c => c.id === id)) }));
+    await api('/api/comments/send', { name: state.name, items });
+    await loadComments();
+    return renderPanel();
+  }
+  const res = e.target.closest('[data-resolve], [data-reopen]');
   if (res) {
-    await api('/api/comments/resolve', { name: state.name, id: res.dataset.resolve });
+    await api(res.dataset.resolve ? '/api/comments/resolve' : '/api/comments/reopen', { name: state.name, id: res.dataset.resolve || res.dataset.reopen });
     await loadComments();
     draw();
     return renderPanel();
