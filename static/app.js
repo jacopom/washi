@@ -459,6 +459,8 @@ const ELK_BASE = {
   'elk.spacing.edgeEdge': '9',
   'elk.spacing.edgeLabel': '2',
   'elk.layered.considerModelOrder.strategy': 'NODES_AND_EDGES',
+  // nodes are listed in story order: a flow back to an earlier node (Close, Back) is the one to reverse
+  'elk.layered.cycleBreaking.strategy': 'MODEL_ORDER',
 };
 const ELK_INTERACTIVE = {
   'elk.layered.cycleBreaking.strategy': 'INTERACTIVE',

@@ -13,6 +13,7 @@ The first version was a classic graph of places, UI/code affordances and stores.
 - Self-loops (a widget leading to its own screen) skip ELK and are drawn as a tight bracket on the card's right side; ELK routed them around the whole card like a second border.
 - Arrowheads use `markerUnits="userSpaceOnUse"` (10px) so they don't shrink with thin strokes.
 - **Stable layout**: after each live draw the viewer saves region-relative node positions to `.history/<slug>.layout.json`. When at least half of a region's nodes have a saved position, ELK runs with INTERACTIVE cycle breaking / layering / crossing minimization seeded with them; new nodes get a guessed position next to a connected neighbour. Only the live view saves, so `washi shot` (headless) draws the same picture the user sees.
+- Cycle breaking uses `MODEL_ORDER`: nodes are listed in story order, so a flow back to an earlier node (Close, Back, "not now") is the one reversed. The default greedy strategy put the Proton VPN popup's home screen at the far right of its region, with everything reading backwards.
 - Regions pack per row (col only orders within a row). A shared column grid let one wide region push every region below it apart.
 - `variantOf` badges (5A, 5B…) are computed identically in `washi.region_labels` and `regionLabels` in app.js — keep them in sync.
 - Node sizes come from canvas `measureText`, so fonts must be loaded first — `document.fonts.ready` isn't enough; the viewer calls `document.fonts.load()` per font spec. Font strings in `F` must match the CSS classes they measure for.
