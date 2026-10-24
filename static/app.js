@@ -202,7 +202,8 @@ const removedNodes = (cur, prev) => {
 };
 
 // ── widgets ───────────────────────────────────────────────
-// Each returns { h, port?, paint(x, y) } for an inner width iw.
+// Each returns { h, port?, end?, paint(x, y) } for an inner width iw; `end` is where a narrow
+// widget stops, so its wire can start at the widget instead of the card edge.
 
 const mountain = (x, y, w, h) =>
   `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" class="w-fill"/>` +
@@ -216,7 +217,7 @@ const WIDGET = {
   },
   text(w, iw) {
     const ls = wrap(w.text, F.text, iw);
-    return { h: ls.length * 13, paint: (x, y) => lines(ls, x, y + 9.5, 13, 'w-text') };
+    return { h: ls.length * 13, end: Math.max(...ls.map(l => textW(l, F.text))), paint: (x, y) => lines(ls, x, y + 9.5, 13, 'w-text') };
   },
   field(w, iw) {
     const lh = w.label ? 13 : 0;
@@ -231,7 +232,7 @@ const WIDGET = {
     const bw = Math.min(iw, textW(w.text, F.button) + 22);
     const p = w.primary ? ' primary' : '';
     return {
-      h: 22, port: 11,
+      h: 22, port: 11, end: bw,
       paint: (x, y) => `<rect x="${x}" y="${y}" width="${bw}" height="22" rx="3" class="w-btn${p}"/>` +
         T(x + bw / 2, y + 14.5, clip(w.text, F.button, bw - 10), `w-btn-t${p}`, 'middle'),
     };
@@ -381,7 +382,7 @@ function buildBlock(n) {
     const anns = annotations(n, W);
     const ports = [];
     for (const { w, m, y: wy } of ws) {
-      if (w.id) ports.push({ id: `${n.id}.${w.id}`, x: W, y: capH + wy + (m.port ?? m.h / 2), side: 'EAST' });
+      if (w.id) ports.push({ id: `${n.id}.${w.id}`, x: W, y: capH + wy + (m.port ?? m.h / 2), side: 'EAST', from: PAD + Math.min(iw, (m.end ?? iw) + 4) });
     }
     return {
       w: W, h: capH + cardH + annH(anns), ports, cardW: W, capH,
@@ -586,6 +587,10 @@ async function layout(s, { persist = true } = {}) {
       T(x0 + badgeW + 8, y0 + 22, c.r.title, 'r-title') +
       `<rect x="${x0}" y="${bodyY}" width="${c.w}" height="${c.h - HEAD}" rx="10" class="r-panel"/>` +
       lines(c.notes, x0 + 24, bodyY + c.g.height + 4, 14, 'r-note') + '</g>');
+    for (const ch of c.g.children || []) {
+      const { n, b } = c.blocks.get(ch.id);
+      geo.nodes.set(n.id, { x: ch.x + x0, y: ch.y + bodyY, w: ch.width, h: ch.height, n, b });
+    }
     for (const e of c.g.edges || []) {
       const sct = e.sections?.[0];
       if (!sct) continue;
@@ -594,15 +599,15 @@ async function layout(s, { persist = true } = {}) {
       const sb = c.blocks.get(src.src).b;
       // across the self-loop gutter, from the card edge to the port
       if (sb.gutter) pts.unshift({ x: pts[0].x - sb.gutter, y: pts[0].y });
+      // a narrow widget's wire starts at the widget, with a dot, not at the card edge
+      const port = src.widget && sb.ports.find(p => p.id === src.from);
+      const start = port && port.from < sb.cardW ? { x: geo.nodes.get(src.src).x + port.from, y: pts[0].y } : null;
+      if (start) pts.unshift(start);
       geo.edges.push({
         from: src.from, to: src.to, src: src.src,
-        pts,
+        pts, dot: !!port,
         labels: (e.labels || []).map(l => ({ x: l.x + x0 + 2, y: l.y + bodyY + 8.5, text: l.text })),
       });
-    }
-    for (const ch of c.g.children || []) {
-      const { n, b } = c.blocks.get(ch.id);
-      geo.nodes.set(n.id, { x: ch.x + x0, y: ch.y + bodyY, w: ch.width, h: ch.height, n, b });
     }
     // self-loops: a "same screen" note in the gutter next to the widget, no wire
     for (const e of c.loops) {
@@ -665,12 +670,6 @@ function draw() {
   const errIds = new Set((state.data?.issues || []).filter(i => i.level === 'error').map(i => i.id));
   const parts = [T(0, 20, s.title + (s.option ? ` · ${s.option}` : ''), 'shape-title'), ...g.regionSvg];
 
-  for (const e of g.edges) {
-    const out = !inSlice(g.byId.get(e.src)) ? ' out' : '';
-    const data = `data-from="${esc(e.from)}" data-to="${esc(e.to)}"`;
-    parts.push(`<path class="edge${out}" ${data} d="${roundedPath(e.pts)}"/>` +
-      e.labels.map(l => `<text x="${l.x}" y="${l.y}" class="elabel${out}" ${data}>${esc(l.text)}</text>`).join(''));
-  }
   for (const m of g.marks) {
     const out = !inSlice(g.byId.get(m.src)) ? ' out' : '';
     const data = `data-from="${esc(m.from)}" data-to="${esc(m.to)}"`;
@@ -693,6 +692,14 @@ function draw() {
       tag = `<g class="stag" transform="translate(${(v.b.cardW || v.w) - tw},${v.b.capH ? 0 : -16})"><rect width="${tw}" height="13" rx="6.5"/>${T(tw / 2, 9.5, v.n.slice, 'stag-t', 'middle')}</g>`;
     }
     parts.push(`<g class="${cls}" data-id="${esc(isExit ? v.n.target : id)}" data-exit="${isExit ? 1 : ''}" transform="translate(${v.x},${v.y})">${v.b.paint()}${tag}</g>`);
+  }
+  // wires go over the cards, since a widget's wire starts inside its card
+  for (const e of g.edges) {
+    const out = !inSlice(g.byId.get(e.src)) ? ' out' : '';
+    const data = `data-from="${esc(e.from)}" data-to="${esc(e.to)}"`;
+    parts.push(`<path class="edge${out}" ${data} d="${roundedPath(e.pts)}"/>` +
+      (e.dot ? `<circle cx="${e.pts[0].x}" cy="${e.pts[0].y}" r="2.6" class="edge-dot${out}" ${data}/>` : '') +
+      e.labels.map(l => `<text x="${l.x}" y="${l.y}" class="elabel${out}" ${data}>${esc(l.text)}</text>`).join(''));
   }
   paintingNode = null;
   if (state.live) state.clipped = [...clipLog.values()];
@@ -725,7 +732,7 @@ function focus(id) {
   svg.querySelectorAll('.hl').forEach(el => el.classList.remove('hl'));
   if (!id) return;
   const touch = new Set([id]);
-  svg.querySelectorAll('.edge, .elabel, .loop').forEach(el => {
+  svg.querySelectorAll('.edge, .edge-dot, .elabel, .loop').forEach(el => {
     const src = el.dataset.from.split('.')[0], to = el.dataset.to;
     if (src === id || to === id) {
       el.classList.add('hl');
