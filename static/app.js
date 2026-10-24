@@ -613,7 +613,7 @@ async function layout(s, { persist = true } = {}) {
     for (const e of c.loops) {
       const v = geo.nodes.get(e.src), port = v.b.ports.find(p => p.id === e.from);
       if (!port || !v.b.gutter) continue;
-      geo.marks.push({ x: v.x + v.b.cardW + 8, y: v.y + port.y, text: loopText(e), from: e.from, to: e.to, src: e.src });
+      geo.marks.push({ x: v.x + v.b.cardW + 8, y: v.y + port.y, x0: v.x + port.from, text: loopText(e), from: e.from, to: e.to, src: e.src });
     }
   }
   return geo;
@@ -670,14 +670,6 @@ function draw() {
   const errIds = new Set((state.data?.issues || []).filter(i => i.level === 'error').map(i => i.id));
   const parts = [T(0, 20, s.title + (s.option ? ` · ${s.option}` : ''), 'shape-title'), ...g.regionSvg];
 
-  for (const m of g.marks) {
-    const out = !inSlice(g.byId.get(m.src)) ? ' out' : '';
-    const data = `data-from="${esc(m.from)}" data-to="${esc(m.to)}"`;
-    // a small circular arrow: the widget changes what this screen shows without leaving it
-    parts.push(`<g class="loop${out}" ${data} transform="translate(${m.x},${m.y})"><title>Stays on this screen</title>` +
-      `<path d="M3.5,-4.2 A5,5 0 1 0 5,1.5" class="loop-i"/><path d="M1.2,-6.6 L5,-4.6 L1.6,-1.8 Z" class="loop-h"/>` +
-      `<text x="11" y="3.5" class="loop-t">${esc(m.text)}</text></g>`);
-  }
   clipLog.clear();
   const sliced = (s.slices || []).length > 0;
   for (const [id, v] of g.nodes) {
@@ -700,6 +692,16 @@ function draw() {
     parts.push(`<path class="edge${out}" ${data} d="${roundedPath(e.pts)}"/>` +
       (e.dot ? `<circle cx="${e.pts[0].x}" cy="${e.pts[0].y}" r="2.6" class="edge-dot${out}" ${data}/>` : '') +
       e.labels.map(l => `<text x="${l.x}" y="${l.y}" class="elabel${out}" ${data}>${esc(l.text)}</text>`).join(''));
+  }
+  for (const m of g.marks) {
+    const out = !inSlice(g.byId.get(m.src)) ? ' out' : '';
+    const data = `data-from="${esc(m.from)}" data-to="${esc(m.to)}"`;
+    // like a wire it starts with a dot on the widget, then a circular arrow: the widget changes
+    // what this screen shows without leaving it
+    parts.push(`<g class="loop${out}" ${data} transform="translate(${m.x},${m.y})"><title>Stays on this screen</title>` +
+      `<line x1="${m.x0 - m.x}" x2="-3" y1="0" y2="0" class="loop-i"/><circle cx="${m.x0 - m.x}" r="2.6" class="loop-h"/>` +
+      `<path d="M3.5,-4.2 A5,5 0 1 0 5,1.5" class="loop-i"/><path d="M1.2,-6.6 L5,-4.6 L1.6,-1.8 Z" class="loop-h"/>` +
+      `<text x="11" y="3.5" class="loop-t">${esc(m.text)}</text></g>`);
   }
   paintingNode = null;
   if (state.live) state.clipped = [...clipLog.values()];
