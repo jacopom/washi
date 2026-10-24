@@ -217,3 +217,15 @@ details.resolved summary { cursor: pointer; margin-bottom: 6px; }
 .ghost { pointer-events: none; }
 .ghost rect { fill: none; stroke: var(--red); stroke-width: 1.4; stroke-dasharray: 4 4; opacity: .55; }
 .ghost-t { font: 600 10.5px Inter; fill: var(--red); paint-order: stroke; stroke: var(--region); stroke-width: 4px; }
+
+/* ── focus card ─────────────────────────────────────────── */
+.focus-card { margin: 14px 0 6px; padding: 14px 14px 10px; background: #fff; border: 1px solid #ebe7e0; border-radius: 10px; }
+.focus-card h2 { font: 400 23px/1.15 'Instrument Serif', serif; margin: 6px 0 2px; }
+.focus-card .opt { margin-bottom: 10px; }
+.focus-card dl.detail { margin-top: 10px; padding-top: 10px; border-top: 1px solid #f0ece6; }
+.focus-kicker { display: flex; gap: 6px; align-items: center; font: 600 11px Inter; color: var(--muted); }
+.note-p { color: var(--muted) !important; font-size: 12px; }
+.q-p { color: var(--red) !important; font-weight: 600; font-size: 12px; }
+#panel code { font: 500 11.5px ui-monospace, Menlo, monospace; background: #f1eee8; padding: 0 3px; border-radius: 3px; }
+details.shape-prose { margin-top: 18px; }
+details.shape-prose summary { font: 600 10.5px Inter; text-transform: uppercase; letter-spacing: .08em; color: var(--faint); cursor: pointer; margin-bottom: 8px; }

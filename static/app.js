@@ -886,8 +886,12 @@ function renderVersions() {
   $('#play').textContent = state.playing ? 'Stop' : 'Replay';
 }
 
-const ref = id => `<span class="ref" data-sel="${esc(id)}">${esc(id)}</span>`;
-const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+const ref = id => {
+  const n = (state.data?.board?.nodes || []).find(x => x.id === id);
+  return `<span class="ref" data-sel="${esc(id)}">${esc(n ? nodeName(n) : id)}</span>`;
+};
+const inline = s => esc(s).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<code>$1</code>');
+const paras = t => String(t || '').split(/\n\s*\n/).map(p => `<p>${inline(p)}</p>`).join('');
 const ago = ts => {
   const m = Math.round((Date.now() / 1000 - ts) / 60);
   return m < 1 ? 'just now' : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
@@ -904,17 +908,28 @@ function renderPanel() {
   const rnum = regionLabels(s.regions || []);
   let html = `<h1>${esc(s.title)}</h1>${s.option ? `<div class="opt">${esc(s.option)}</div>` : ''}`;
 
-  if (state.selected && byId.has(state.selected)) {
-    const n = byId.get(state.selected);
-    const outs = (s.flows || []).filter(f => f.from.split('.')[0] === n.id);
-    const ins = (s.flows || []).filter(f => f.to === n.id);
-    const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '';
+  // The node in focus leads the panel: its own prose, then its region's, then how it connects.
+  const sel = state.selected && byId.get(state.selected);
+  if (sel) {
+    const r = (s.regions || []).find(x => x.id === sel.region);
+    const outs = (s.flows || []).filter(f => f.from.split('.')[0] === sel.id);
+    const ins = (s.flows || []).filter(f => f.to === sel.id);
     const lbl = f => f.label ? ` <span class="none">${esc(f.label)}</span>` : '';
-    html += `<h3>Selected</h3><dl class="detail">
-      ${row('Node', `<b>${esc(nodeName(n))}</b> · ${n.type} · region ${rnum.get(n.region)}${n.slice ? ` · ${esc(n.slice)}` : ''}`)}
-      ${row('Flows out', outs.map(f => `${esc(f.from.split('.')[1] || '')} → ${ref(f.to)}${lbl(f)}`).join('<br>'))}
-      ${row('Flows in', ins.map(f => ref(f.from.split('.')[0]) + lbl(f)).join('<br>'))}
-      ${row('Note', esc(n.note))}</dl>`;
+    const row = (k, v) => v ? `<dt>${k}</dt><dd>${v}</dd>` : '';
+    const kind = { screen: 'Screen', cutout: 'Cut-out', step: 'Step', decision: 'Decision' }[sel.type];
+    html += `<section class="focus-card">
+      <div class="focus-kicker"><span class="tag num">${esc(rnum.get(sel.region))}</span>${esc(r?.title || '')}</div>
+      <h2>${esc(nodeName(sel))}</h2>
+      <div class="opt">${kind}${sel.type === 'screen' && sel.caption ? ` · “${esc(sel.title)}”` : ''}${sel.slice ? ` · ${esc(sel.slice)}` : ''}</div>
+      ${sel.prose ? paras(sel.prose) : '<p class="none">No prose for this node yet — ask Claude to describe it.</p>'}
+      ${sel.note ? `<p class="note-p">${inline(sel.note)}</p>` : ''}
+      ${sel.question ? `<p class="q-p">${inline(sel.question)}</p>` : ''}
+      <dl class="detail">
+        ${row('Leads to', outs.map(f => `${f.from.includes('.') ? esc(f.from.split('.')[1]) + ' → ' : ''}${ref(f.to)}${lbl(f)}`).join('<br>'))}
+        ${row('From', ins.map(f => ref(f.from.split('.')[0]) + lbl(f)).join('<br>'))}
+      </dl>
+    </section>`;
+    if (r?.prose) html += `<h3>Region ${esc(rnum.get(r.id))} · ${esc(r.title)}</h3>` + paras(r.prose);
   }
 
   const open = state.comments.filter(c => c.status === 'open'), done = state.comments.filter(c => c.status !== 'open');
@@ -939,7 +954,9 @@ function renderPanel() {
     }).join('') + '</ul>';
   }
 
-  if (s.prose) html += `<h3>Prose</h3>` + s.prose.split(/\n\s*\n/).map(p => `<p>${inline(p)}</p>`).join('');
+  if (s.prose) html += sel
+    ? `<details class="shape-prose"><summary>About the shape</summary>${paras(s.prose)}</details>`
+    : `<h3>Prose</h3>` + paras(s.prose);
 
   const qs = (s.nodes || []).filter(n => n.question);
   if (qs.length) {

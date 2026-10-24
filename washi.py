@@ -24,12 +24,12 @@ SLICE_ID = re.compile(r"^S\d+$")
 
 TOP_KEYS = {"title", "option", "prose", "slices", "regions", "nodes", "flows"}
 SLICE_KEYS = {"id", "title", "note"}
-REGION_KEYS = {"id", "title", "col", "row", "note", "variantOf"}
+REGION_KEYS = {"id", "title", "col", "row", "note", "prose", "variantOf"}
 NODE_KEYS = {
-    "screen": {"id", "type", "region", "slice", "caption", "title", "w", "widgets", "note", "question"},
-    "cutout": {"id", "type", "region", "slice", "caption", "w", "widgets", "note", "question"},
-    "step": {"id", "type", "region", "slice", "text", "note", "question"},
-    "decision": {"id", "type", "region", "slice", "text", "note", "question"},
+    "screen": {"id", "type", "region", "slice", "caption", "title", "w", "widgets", "note", "question", "prose"},
+    "cutout": {"id", "type", "region", "slice", "caption", "w", "widgets", "note", "question", "prose"},
+    "step": {"id", "type", "region", "slice", "text", "note", "question", "prose"},
+    "decision": {"id", "type", "region", "slice", "text", "note", "question", "prose"},
 }
 NODE_REQUIRED = {"screen": ["title", "widgets"], "cutout": ["caption", "widgets"], "step": ["text"], "decision": ["text"]}
 # widget type -> (allowed fields, required fields)
@@ -125,6 +125,9 @@ def validate(s):
         keys(r, REGION_KEYS, rid, rid)
         if not isinstance(r.get("title"), str) or not r["title"].strip():
             err(f"{rid} needs a title", rid)
+        for k in ("note", "prose"):
+            if k in r and not isinstance(r[k], str):
+                err(f"{rid}: '{k}' must be a string", rid)
         for k in ("col", "row"):
             if k in r and (not isinstance(r[k], int) or r[k] < 0):
                 err(f"{rid}: {k} must be an integer ≥ 0", rid)
@@ -154,7 +157,7 @@ def validate(s):
         for k in NODE_REQUIRED[t]:
             if k not in n:
                 err(f"{nid}: {t} needs '{k}'", nid)
-        for k in ("caption", "title", "text", "note", "question"):
+        for k in ("caption", "title", "text", "note", "question", "prose"):
             if k in n and not isinstance(n[k], str):
                 err(f"{nid}: '{k}' must be a string", nid)
         if "w" in n and (not isinstance(n["w"], int) or not 160 <= n["w"] <= 520):
@@ -345,6 +348,8 @@ def to_markdown(s, only_slice=None):
         lines += [f"## {rnum[r['id']]}. {r['title']}", ""]
         if r.get("note"):
             lines += [r["note"], ""]
+        if r.get("prose"):
+            lines += [r["prose"].strip(), ""]
         for n in members:
             label = {"screen": "Screen", "cutout": "Cut-out", "step": "Step", "decision": "Decision"}[n["type"]]
             head = f"### {label}: {name(n)}"
@@ -353,6 +358,8 @@ def to_markdown(s, only_slice=None):
             if n.get("slice") and not only_slice:
                 head += f" · {n['slice']}"
             lines += [head, ""]
+            if n.get("prose"):
+                lines += [n["prose"].strip(), ""]
             for w in n.get("widgets", []):
                 outs = [arrow(f) for f in flows if w.get("id") and f["from"] == f"{n['id']}.{w['id']}"]
                 lines.append(f"- {_widget_md(w)}" + (f" {' '.join(outs)}" if outs else ""))

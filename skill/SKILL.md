@@ -53,7 +53,8 @@ You write it in a fixed JSON language; the viewer at http://localhost:4747 rende
   - `cutout` — dashed card showing one variant of a slot: `caption` + `widgets`, optional `w`.
   - `step` — what the system does, in plain words: `text`.
   - `decision` — green diamond: `text` (short question). Every answer is a labelled flow.
-  - Any node can carry `note` (gray), `question` (red, listed under Open questions) and `slice`.
+  - Any node can carry `note` (gray, one line on the drawing), `question` (red, listed under Open questions), `slice`, and `prose`.
+- **Prose** lives at three levels and is shown when that thing is in focus: the shape's `prose` (the overall story, shown when nothing is selected), a region's `prose` (why this stage exists), and a node's `prose` (1–3 short paragraphs: what it is, why it behaves this way, edge cases, and where it lives in code when mapping an existing product, in `backticks`). Keep the drawing light; put the explanation in prose.
 - **Widgets** (only these): `heading{text}`, `text{text}`, `field{label?, text?}`, `button{text, primary?}`, `image{text?}`, `list{label?, items}`, `tiles{label?, items}` (poster grid), `columns{columns:[{title, items}]}` (board), `post{who, when?, text, image?}` (thread entry), `slot{text}` (dotted placeholder filled by cut-outs), `tabs{items, active?}`, `select{label, value?}`, `toggle{label, on?}`, `progress{label, value 0–1}`, `divider{}`. Give a widget an `id` to wire from it.
 - **Flows**: `from` is `node` or `node.widget`; `to` is always a node; `label` is the trigger or answer ("click", "on the Mac"). A flow to a node in another region renders as an exit label — that's intended.
 - **Slices** (optional) split the shape into build increments. Once `slices` exists, every node outside option regions should carry one; the viewer can show one slice at a time and `washi md FILE --slice S1` exports just that increment.
