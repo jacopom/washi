@@ -895,7 +895,9 @@ function renderBoardSelect() {
     const flags = [b.errors && `${b.errors} error${b.errors === 1 ? '' : 's'}`, b.comments && `${b.comments} comment${b.comments === 1 ? '' : 's'}`].filter(Boolean);
     return `<option value="${esc(b.name)}" ${b.name === state.name ? 'selected' : ''}>${esc(b.title)}${flags.length ? ' · ' + flags.join(' · ') : ''}</option>`;
   }).join('') + '</optgroup>').join('');
-  if (sel.innerHTML !== html) sel.innerHTML = html;
+  // compare with what was last written: the browser re-serializes innerHTML (selected="") so it never
+  // matches, and rewriting the options every poll swallowed picks made while the menu was open
+  if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
   sel.hidden = !state.boards.length;
 }
 
@@ -905,7 +907,7 @@ function renderSliceSelect() {
   const sel = $('#slice');
   sel.hidden = !slices.length;
   const html = `<option value="">All slices</option>` + slices.map(s => `<option value="${esc(s.id)}" ${s.id === state.slice ? 'selected' : ''}>${esc(s.id)} · ${esc(s.title)}</option>`).join('');
-  if (sel.innerHTML !== html) sel.innerHTML = html;
+  if (sel.dataset.html !== html) { sel.innerHTML = html; sel.dataset.html = html; }
 }
 
 function renderVersions() {

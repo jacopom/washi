@@ -36,3 +36,6 @@ The first version was a classic graph of places, UI/code affordances and stores.
 ## History and sidecars
 - A snapshot is written only when canonical (sort_keys) JSON differs from the last version, so re-saves don't inflate the count.
 - Files with a dot in the stem (`cineteca.comments.json`) are sidecars, not shapes — the scanner skips them.
+
+## Dropdowns
+- Never compare `select.innerHTML` with freshly built HTML to skip a rewrite: the browser re-serializes it (`selected=""`), so it never matches. The board list was rebuilt on every 700 ms poll, and a pick made while Chrome's native menu was open got dropped. Compare with the last string written instead (`sel.dataset.html`).
