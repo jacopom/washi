@@ -430,6 +430,7 @@ function buildBlock(n) {
 // Once a shape has been drawn, its node positions seed ELK's interactive mode, so the
 // next version keeps the same layers and order instead of reshuffling.
 
+const loopText = e => e.label ? `${e.label} · same screen` : 'same screen';
 const nodeName = n => n.caption || n.title || n.text || n.label;
 
 // Badge labels: 1, 2, … and 5A, 5B, … for a region and its variants (mirrors washi.region_labels).
@@ -520,7 +521,7 @@ async function layout(s, { persist = true } = {}) {
       // self-loops are drawn as a small marker right of the widget; widen the node so ELK keeps that gutter clear
       const own = loops.filter(e => e.src === n.id && b.ports.some(p => p.id === e.from));
       if (own.length) {
-        b.gutter = Math.max(...own.map(e => textW(e.label || '', F.label))) + 30;
+        b.gutter = Math.max(...own.map(e => textW(loopText(e), F.label))) + 30;
         b.w += b.gutter;
         for (const p of b.ports) if (p.side === 'EAST') p.x += b.gutter;
       }
@@ -573,7 +574,7 @@ async function layout(s, { persist = true } = {}) {
   }
   const offY = i => 46 + rowH.slice(0, i).reduce((a, h) => a + (h || 0) + GRID, 0);
 
-  const geo = { regions: new Map(), nodes: new Map(), regionSvg: [], edges: [], width: 0, height: 0, shape: s, rnum, byId };
+  const geo = { regions: new Map(), nodes: new Map(), regionSvg: [], edges: [], marks: [], width: 0, height: 0, shape: s, rnum, byId };
   for (const c of cells) {
     const x0 = c.x, y0 = offY(c.row), bodyY = y0 + HEAD;
     const label = rnum.get(c.r.id), badgeW = Math.max(22, textW(label, '700 12px Inter') + 14);
@@ -603,16 +604,11 @@ async function layout(s, { persist = true } = {}) {
       const { n, b } = c.blocks.get(ch.id);
       geo.nodes.set(n.id, { x: ch.x + x0, y: ch.y + bodyY, w: ch.width, h: ch.height, n, b });
     }
-    // self-loops: a short hook out of the widget and back into it, labelled in the gutter
+    // self-loops: a "same screen" note in the gutter next to the widget, no wire
     for (const e of c.loops) {
       const v = geo.nodes.get(e.src), port = v.b.ports.find(p => p.id === e.from);
       if (!port || !v.b.gutter) continue;
-      const x = v.x + v.b.cardW, y = v.y + port.y, out = 14;
-      geo.edges.push({
-        from: e.from, to: e.to, src: e.src,
-        pts: [{ x, y: y - 4 }, { x: x + out, y: y - 4 }, { x: x + out, y: y + 4 }, { x, y: y + 4 }],
-        labels: e.label ? [{ x: x + out + 5, y: y + 3.5, text: e.label }] : [],
-      });
+      geo.marks.push({ x: v.x + v.b.cardW + 8, y: v.y + port.y, text: loopText(e), from: e.from, to: e.to, src: e.src });
     }
   }
   return geo;
@@ -675,6 +671,14 @@ function draw() {
     parts.push(`<path class="edge${out}" ${data} d="${roundedPath(e.pts)}"/>` +
       e.labels.map(l => `<text x="${l.x}" y="${l.y}" class="elabel${out}" ${data}>${esc(l.text)}</text>`).join(''));
   }
+  for (const m of g.marks) {
+    const out = !inSlice(g.byId.get(m.src)) ? ' out' : '';
+    const data = `data-from="${esc(m.from)}" data-to="${esc(m.to)}"`;
+    // a small circular arrow: the widget changes what this screen shows without leaving it
+    parts.push(`<g class="loop${out}" ${data} transform="translate(${m.x},${m.y})"><title>Stays on this screen</title>` +
+      `<path d="M3.5,-4.2 A5,5 0 1 0 5,1.5" class="loop-i"/><path d="M1.2,-6.6 L5,-4.6 L1.6,-1.8 Z" class="loop-h"/>` +
+      `<text x="11" y="3.5" class="loop-t">${esc(m.text)}</text></g>`);
+  }
   clipLog.clear();
   const sliced = (s.slices || []).length > 0;
   for (const [id, v] of g.nodes) {
@@ -721,7 +725,7 @@ function focus(id) {
   svg.querySelectorAll('.hl').forEach(el => el.classList.remove('hl'));
   if (!id) return;
   const touch = new Set([id]);
-  svg.querySelectorAll('.edge, .elabel').forEach(el => {
+  svg.querySelectorAll('.edge, .elabel, .loop').forEach(el => {
     const src = el.dataset.from.split('.')[0], to = el.dataset.to;
     if (src === id || to === id) {
       el.classList.add('hl');
