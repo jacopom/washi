@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Washi</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Instrument+Serif&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script src="https://cdn.jsdelivr.net/npm/elkjs@0.9.3/lib/elk.bundled.js"></script>
+</head>
+<body>
+<header>
+  <div class="brand">Washi</div>
+  <select id="board" aria-label="Shape"></select>
+  <div class="versions">
+    <button id="prev" aria-label="Previous version">‹</button>
+    <span id="ver"></span>
+    <button id="next" aria-label="Next version">›</button>
+    <button id="latest">Back to latest</button>
+    <button id="play">Replay</button>
+  </div>
+  <div class="spacer"></div>
+  <button id="copy" class="primary">Copy plan</button>
+  <span id="conn" class="dot" title="Connection"></span>
+</header>
+<main>
+  <section id="stage">
+    <svg id="canvas">
+      <defs>
+        <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z"/></marker>
+        <marker id="arrow-hl" viewBox="0 0 10 10" refX="9" refY="5" markerUnits="userSpaceOnUse" markerWidth="10" markerHeight="10" orient="auto-start-reverse"><path d="M0,1 L9,5 L0,9 z"/></marker>
+      </defs>
+      <g id="vp"></g>
+    </svg>
+    <div id="banner" hidden></div>
+    <div id="empty" hidden></div>
+    <div id="composer" hidden>
+      <div class="on"></div>
+      <textarea rows="3" placeholder="What should change here? (⌘↩ to save)"></textarea>
+      <div class="row"><button id="c-cancel">Cancel</button><button id="c-save" class="primary">Comment</button></div>
+    </div>
+    <div id="bar">
+      <button id="fit">Fit</button>
+      <button id="z100">100%</button>
+      <button id="notes" class="toggle">Notes</button>
+      <button id="prose" class="toggle">Prose</button>
+      <button id="comment" class="toggle" title="Click a screen or the canvas to leave a comment (c)">Comment</button>
+      <select id="slice" aria-label="Slice" hidden></select>
+      <span id="zoom"></span>
+    </div>
+  </section>
+  <aside id="panel"></aside>
+</main>
+<script src="app.js"></script>
+</body>
+</html>

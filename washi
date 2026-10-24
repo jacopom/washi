@@ -1,0 +1,6 @@
+#!/usr/bin/env bash
+# washi serve [--port N] [dirs...]   start the viewer (watches ~/Projects/*/washi)
+# washi <check|md|comments|resolve|shot> ...   see washi.py
+HERE="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+if [[ "$1" == "serve" ]]; then shift; exec python3 "$HERE/server.py" "$@"; fi
+exec python3 "$HERE/washi.py" "$@"
