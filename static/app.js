@@ -420,9 +420,9 @@ function buildBlock(n) {
         lines(ls, W / 2, H / 2 + 3.5 - (ls.length - 1) * 6, 12, 'dec-t', 'middle') + paintAnn(anns, H),
     };
   }
-  // exit: a reference to a node in another region
-  const label = `${n.label} (${n.num})`, W = textW(label, F.exit) + 4;
-  return { w: W, h: 16, ports: [], capH: 0, paint: () => T(0, 12, label, 'exit-t') };
+  // exit: a reference to a node in another region, or back to an earlier node in this one
+  const label = n.num ? `${n.label} (${n.num})` : n.label, W = textW(label, F.exit) + 4;
+  return { w: W, h: 16, ports: [], capH: 0, paint: () => T(0, 12, label, n.num ? 'exit-t' : 'exit-t back') };
 }
 
 // ── layout ────────────────────────────────────────────────
@@ -471,6 +471,7 @@ const ELK_INTERACTIVE = {
 async function layout(s, { persist = true } = {}) {
   const regions = s.regions || [], nodes = s.nodes || [], flows = s.flows || [];
   const byId = new Map(nodes.map(n => [n.id, n]));
+  const order = new Map(nodes.map((n, i) => [n.id, i]));
   const rnum = regionLabels(regions);
   const pos = positions.get(state.name) || new Map();
 
@@ -487,6 +488,12 @@ async function layout(s, { persist = true } = {}) {
       target = `exit--${f.from}--${f.to}`;
       while (R.exits.has(target)) target += '+';
       R.exits.set(target, { id: target, type: 'exit', label: nodeName(to), num: rnum.get(to.region), target: f.to, src });
+    } else if (order.get(f.to) < order.get(src)) {
+      // a flow back to an earlier node (Close, Back) ends in a short "← name" stub instead of
+      // a line looping around the region; clicking it jumps to the target like an exit
+      target = `back--${f.from}--${f.to}`;
+      while (R.exits.has(target)) target += '+';
+      R.exits.set(target, { id: target, type: 'exit', label: nodeName(to), num: null, target: f.to, src });
     }
     R.edges.push({ ...f, src, widget, target });
   }
@@ -510,6 +517,13 @@ async function layout(s, { persist = true } = {}) {
     const children = all.map(n => {
       const b = buildBlock(n);
       blocks.set(n.id, { n, b });
+      // self-loops are drawn as a small marker right of the widget; widen the node so ELK keeps that gutter clear
+      const own = loops.filter(e => e.src === n.id && b.ports.some(p => p.id === e.from));
+      if (own.length) {
+        b.gutter = Math.max(...own.map(e => textW(e.label || '', F.label))) + 30;
+        b.w += b.gutter;
+        for (const p of b.ports) if (p.side === 'EAST') p.x += b.gutter;
+      }
       const incoming = flowsIn.filter(e => e.target === n.id);
       if (b.inPorts && incoming.length) {
         b.inPorts(incoming.length).forEach((y, k) => {
@@ -575,9 +589,13 @@ async function layout(s, { persist = true } = {}) {
       const sct = e.sections?.[0];
       if (!sct) continue;
       const src = c.R.edges[+e.id.slice(1)];
+      const pts = [sct.startPoint, ...(sct.bendPoints || []), sct.endPoint].map(p => ({ x: p.x + x0, y: p.y + bodyY }));
+      const sb = c.blocks.get(src.src).b;
+      // across the self-loop gutter, from the card edge to the port
+      if (sb.gutter) pts.unshift({ x: pts[0].x - sb.gutter, y: pts[0].y });
       geo.edges.push({
         from: src.from, to: src.to, src: src.src,
-        pts: [sct.startPoint, ...(sct.bendPoints || []), sct.endPoint].map(p => ({ x: p.x + x0, y: p.y + bodyY })),
+        pts,
         labels: (e.labels || []).map(l => ({ x: l.x + x0 + 2, y: l.y + bodyY + 8.5, text: l.text })),
       });
     }
@@ -585,15 +603,15 @@ async function layout(s, { persist = true } = {}) {
       const { n, b } = c.blocks.get(ch.id);
       geo.nodes.set(n.id, { x: ch.x + x0, y: ch.y + bodyY, w: ch.width, h: ch.height, n, b });
     }
-    // self-loops: out of the widget, up the right side, back into the card by the title
+    // self-loops: a short hook out of the widget and back into it, labelled in the gutter
     for (const e of c.loops) {
       const v = geo.nodes.get(e.src), port = v.b.ports.find(p => p.id === e.from);
-      if (!port) continue;
-      const x = v.x + v.b.cardW, y1 = v.y + port.y, y2 = v.y + v.b.loopY, out = 16;
+      if (!port || !v.b.gutter) continue;
+      const x = v.x + v.b.cardW, y = v.y + port.y, out = 14;
       geo.edges.push({
         from: e.from, to: e.to, src: e.src,
-        pts: [{ x, y: y1 }, { x: x + out, y: y1 }, { x: x + out, y: y2 }, { x, y: y2 }],
-        labels: e.label ? [{ x: x + out + 4, y: (y1 + y2) / 2 + 3, text: e.label }] : [],
+        pts: [{ x, y: y - 4 }, { x: x + out, y: y - 4 }, { x: x + out, y: y + 4 }, { x, y: y + 4 }],
+        labels: e.label ? [{ x: x + out + 5, y: y + 3.5, text: e.label }] : [],
       });
     }
   }
@@ -668,7 +686,7 @@ function draw() {
     let tag = '';
     if (sliced && !isExit && v.n.slice) {
       const tw = textW(v.n.slice, F.tag) + 10;
-      tag = `<g class="stag" transform="translate(${v.w - tw},${v.b.capH ? 0 : -16})"><rect width="${tw}" height="13" rx="6.5"/>${T(tw / 2, 9.5, v.n.slice, 'stag-t', 'middle')}</g>`;
+      tag = `<g class="stag" transform="translate(${(v.b.cardW || v.w) - tw},${v.b.capH ? 0 : -16})"><rect width="${tw}" height="13" rx="6.5"/>${T(tw / 2, 9.5, v.n.slice, 'stag-t', 'middle')}</g>`;
     }
     parts.push(`<g class="${cls}" data-id="${esc(isExit ? v.n.target : id)}" data-exit="${isExit ? 1 : ''}" transform="translate(${v.x},${v.y})">${v.b.paint()}${tag}</g>`);
   }
@@ -694,7 +712,7 @@ function draw() {
 
 function commentPos(c) {
   const v = c.node && state.geo?.nodes.get(c.node);
-  if (v) return { x: v.x + v.w - 2, y: v.y + (v.b.capH || 0) + 2 };
+  if (v) return { x: v.x + (v.b.cardW || v.w) - 2, y: v.y + (v.b.capH || 0) + 2 };
   return typeof c.x === 'number' ? { x: c.x, y: c.y } : null;
 }
 

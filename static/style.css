@@ -136,6 +136,7 @@ body.shot main { grid-template-columns: 1fr; }
 .dec { fill: var(--green-soft); stroke: var(--green); stroke-width: 1.4; }
 .dec-t { font: 600 10px Inter; fill: #1f5a35; }
 .exit-t { font: 700 10.5px Inter; fill: var(--ink); }
+.exit-t.back { font-weight: 600; fill: var(--muted); }
 .note-t { font: 400 10.5px Inter; fill: var(--muted); }
 .q-t { font: 600 10.5px Inter; fill: var(--red); }
 .q-tri { fill: var(--red); }
