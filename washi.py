@@ -4,8 +4,10 @@
   washi check FILE...                 validate shapes (+ render warnings from the viewer), exit 1 on errors
   washi md FILE [--slice S1]           print the shape (or one slice of it) as a markdown plan
   washi comments FILE [--all]          list open comments left in the viewer (--all: resolved too)
+  washi reply FILE ID TEXT...          answer a comment in its thread (the viewer shows it as Claude's)
   washi resolve FILE ID [REPLY...]     mark a comment resolved, optionally with a reply
   washi reopen FILE ID                 put a resolved comment back on the agenda
+  washi delete FILE ID                 remove a comment and its thread
   washi watch                          print comments as they're sent from the viewer (one line each)
   washi relayout FILE [--region R1]    forget saved node positions (after a big restructure)
   washi shot NAME [--region R2] [--out PNG] [--port 4747]
@@ -434,11 +436,24 @@ def add_comment(path, text, node=None, x=None, y=None, version=None, **anchor):
     return c
 
 
+# a comment is a thread: the first message is c["text"], then c["thread"] = [{by: you|claude, text, ts}]
+def reply_comment(path, cid, text, by="claude"):
+    cs = load_comments(path)
+    for c in cs:
+        if c["id"] == cid:
+            c.setdefault("thread", []).append({"by": by, "text": text, "ts": time.time()})
+            _write_json(comments_path(path), cs)
+            return c
+    return None
+
+
 def resolve_comment(path, cid, reply=None, version=None):
     cs = load_comments(path)
     for c in cs:
         if c["id"] == cid:
-            c.update(status="resolved", reply=reply or c.get("reply"), resolvedIn=version)
+            if reply:
+                c.setdefault("thread", []).append({"by": "claude", "text": reply, "ts": time.time()})
+            c.update(status="resolved", resolvedIn=version)
             _write_json(comments_path(path), cs)
             return True
     return False
@@ -453,7 +468,22 @@ def comment_where(c):
 
 
 # "Send to Claude" in the viewer appends here; `washi watch` (run by Claude as a background monitor) tails it
+# and touches LISTENING, so the viewer can tell "Claude is working on it" from "nobody is listening"
 OUTBOX = Path.home() / ".washi" / "outbox.jsonl"
+LISTENING = Path.home() / ".washi" / "listening"
+
+
+def listening():
+    try:
+        return time.time() - LISTENING.stat().st_mtime < 5
+    except FileNotFoundError:
+        return False
+
+
+def _outbox(entries):
+    OUTBOX.parent.mkdir(exist_ok=True)
+    with OUTBOX.open("a", encoding="utf-8") as f:
+        f.writelines(json.dumps(x, ensure_ascii=False) + "\n" for x in entries)
 
 
 def send_comments(path, name, items):
@@ -467,10 +497,20 @@ def send_comments(path, name, items):
             sent.append({"shape": name, "file": str(path), "id": c["id"], "where": it.get("where") or comment_where(c), "text": c["text"]})
     if sent:
         _write_json(comments_path(path), cs)
-        OUTBOX.parent.mkdir(exist_ok=True)
-        with OUTBOX.open("a", encoding="utf-8") as f:
-            f.writelines(json.dumps(x, ensure_ascii=False) + "\n" for x in sent)
+        _outbox(sent)
     return len(sent)
+
+
+def send_reply(path, name, cid, text, where=None):
+    """The user answered in a thread with "Send to Claude" on."""
+    cs = load_comments(path)
+    c = next((c for c in cs if c["id"] == cid), None)
+    if not c:
+        return False
+    c["sent"] = time.time()
+    _write_json(comments_path(path), cs)
+    _outbox([{"shape": name, "file": str(path), "id": cid, "where": where or comment_where(c), "text": text, "re": c["text"]}])
+    return True
 
 
 def watch():
@@ -481,6 +521,7 @@ def watch():
         while True:
             line = f.readline()
             if not line:
+                LISTENING.touch()
                 time.sleep(0.5)
                 continue
             try:
@@ -488,7 +529,17 @@ def watch():
             except ValueError:
                 continue
             text = " ".join(x["text"].split())
-            print(f"{x['shape']} {x['id']} {x['where']}: {text}  [{x['file']}]", flush=True)
+            re = f" (reply in the thread that began \"{' '.join(x['re'].split())[:80]}\")" if x.get("re") else ""
+            print(f"{x['shape']} {x['id']} {x['where']}{re}: {text}  [{x['file']}]", flush=True)
+
+
+def delete_comment(path, cid):
+    cs = load_comments(path)
+    rest = [c for c in cs if c["id"] != cid]
+    if len(rest) == len(cs):
+        return False
+    _write_json(comments_path(path), rest)
+    return True
 
 
 def reopen_comment(path, cid):
@@ -568,7 +619,7 @@ def main(argv):
         except OSError:
             pass
         return 0
-    if not argv or argv[0] not in ("check", "md", "shot", "comments", "resolve", "reopen") or len(argv) < 2:
+    if not argv or argv[0] not in ("check", "md", "shot", "comments", "reply", "resolve", "reopen", "delete") or len(argv) < 2:
         print(__doc__.strip())
         return 2
     cmd, args = argv[0], argv[1:]
@@ -578,13 +629,22 @@ def main(argv):
         cs = [c for c in load_comments(args[0]) if "--all" in args or c.get("status") == "open"]
         for c in cs:
             where = comment_where(c)
-            print(f"{c['id']} [{c['status']}] v{c.get('version')} {where}: {c['text']}" + (f"\n    reply: {c['reply']}" if c.get("reply") else ""))
+            print(f"{c['id']} [{c['status']}] v{c.get('version')} {where}: {c['text']}" + (f"\n    reply: {c['reply']}" if c.get("reply") else "")
+                  + "".join(f"\n    {m['by']}: {m['text']}" for m in c.get("thread", [])))
         if not cs:
             print("no open comments")
         return 0
+    if cmd == "reply":
+        ok = len(args) > 2 and reply_comment(args[0], args[1], " ".join(args[2:]))
+        print("replied" if ok else f"no comment {args[1]}" if len(args) > 2 else "usage: washi reply FILE ID TEXT...")
+        return 0 if ok else 1
     if cmd == "resolve":
         ok = resolve_comment(args[0], args[1], " ".join(args[2:]) or None, len(list(history_dir(args[0]).glob("*.json"))))
         print("resolved" if ok else f"no comment {args[1]}")
+        return 0 if ok else 1
+    if cmd == "delete":
+        ok = delete_comment(args[0], args[1])
+        print("deleted" if ok else f"no comment {args[1]}")
         return 0 if ok else 1
     if cmd == "reopen":
         ok = reopen_comment(args[0], args[1])

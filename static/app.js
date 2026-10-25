@@ -93,6 +93,7 @@ async function poll() {
     $('#conn').className = 'dot ok';
     state.dirs = s.dirs;
     state.boards = s.boards;
+    if (state.listening !== s.listening) { state.listening = s.listening; if (state.thread) renderThread(); }
     const names = s.boards.map(b => b.name);
     if (!names.includes(state.name)) {
       const h = hashParams().name;
@@ -104,6 +105,7 @@ async function poll() {
     if (s.version !== state.version) {
       state.version = s.version;
       await loadComments();
+      if (state.thread) renderThread();
       if (state.live) await loadLive();
       else { state.revs = s.boards.find(b => b.name === state.name)?.revs || 0; renderVersions(); draw(); renderPanel(); }
     }
@@ -722,7 +724,7 @@ function draw() {
     const p = commentPos(c);
     if (!p) return;
     if (c.rect) parts.push(`<rect class="c-area" x="${p.x - c.rect.w}" y="${p.y}" width="${c.rect.w}" height="${c.rect.h}" rx="4"/>`);
-    parts.push(`<g class="pin" data-cid="${esc(c.id)}" transform="translate(${p.x},${p.y})"><circle r="10"/>${T(0, 3.5, c.id.slice(1), 'pin-t', 'middle')}<title>${esc(c.text)}</title></g>`);
+    parts.push(`<g class="pin${pending(c) ? ' busy' : ''}" data-cid="${esc(c.id)}" transform="translate(${p.x},${p.y})"><circle r="10"/>${T(0, 3.5, c.id.slice(1), 'pin-t', 'middle')}</g>`);
   });
 
   vp.innerHTML = parts.join('');
@@ -844,7 +846,7 @@ svg.addEventListener('pointerup', e => {
   // pointer capture retargets events to the svg, so hit-test manually
   const el = document.elementFromPoint(e.clientX, e.clientY);
   const pin = el?.closest('.pin');
-  if (pin) return showComment(pin.dataset.cid);
+  if (pin) return showComment(pin.dataset.cid, e);
   const hit = el?.closest('.node');
   if (state.commenting) return openComposer(e, { point: toCanvas(e.clientX, e.clientY) });
   select(hit?.dataset.id || null, !!hit?.dataset.exit); // clicking an exit jumps to its target
@@ -899,40 +901,99 @@ function where(c) {
   return [n ? nodeName(n) : `${c.node} (gone)`, c.widget, c.item].filter(Boolean).join(' › ');
 }
 
-function openComposer(e, at) {
-  const r = $('#stage').getBoundingClientRect();
-  composing = at.rect ? areaAnchor(at.rect) : pointAnchor(at.point);
-  const box = $('#composer');
+// One popover for both: a new comment (composing) or an existing thread (state.thread).
+// "Send to Claude" is remembered; off, the comment just stays on the drawing until sent later.
+const clock = ts => new Date(ts * 1000).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+const messages = c => [{ by: 'you', text: c.text, ts: c.ts }, ...(c.thread || []),
+  ...(c.reply && !(c.thread || []).some(m => m.by === 'claude') ? [{ by: 'claude', text: c.reply, ts: null }] : [])];
+// waiting on Claude: sent, and Claude hasn't answered since
+const pending = c => c.status === 'open' && c.sent && !(c.thread || []).some(m => m.by === 'claude' && m.ts > c.sent);
+
+const svgIcon = d => `<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+const ICON = {
+  check: svgIcon('<path d="M20 6 9 17l-5-5"/>'),
+  reopen: svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'),
+  trash: svgIcon('<path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/>'),
+  close: svgIcon('<path d="M18 6 6 18M6 6l12 12"/>'),
+};
+function placePop(cx, cy) {
+  const r = $('#stage').getBoundingClientRect(), box = $('#composer');
   box.hidden = false;
-  box.style.left = `${Math.min(e.clientX - r.left, r.width - 300)}px`;
-  box.style.top = `${Math.min(e.clientY - r.top + 8, r.height - 150)}px`;
+  box.style.left = `${Math.max(8, Math.min(cx - r.left, r.width - 316))}px`;
+  box.style.top = `${Math.max(8, Math.min(cy - r.top + 8, r.height - box.offsetHeight - 8))}px`;
+}
+function openComposer(e, at) {
+  state.thread = null;
+  composing = at.rect ? areaAnchor(at.rect) : pointAnchor(at.point);
   $('#composer .on').textContent = where(composing).replace(/^(?!area)/, 'on ');
-  const ta = $('#composer textarea');
-  ta.value = '';
-  ta.focus();
+  $('#composer .msgs').innerHTML = $('#composer .status').innerHTML = '';
+  $('#composer textarea').placeholder = 'Comment, or ask Claude to change something';
+  $('#c-send').checked = pref('send', true);
+  $('#composer textarea').value = '';
+  placePop(e.clientX, e.clientY);
+  $('#composer textarea').focus();
+}
+function renderThread() {
+  const c = state.comments.find(x => x.id === state.thread);
+  if (!c) return closeComposer();
+  const open = c.status === 'open';
+  $('#composer .on').innerHTML = `<span class="tag pinno">${esc(c.id.slice(1))}</span><span class="where">${esc(where(c))}</span>` +
+    `<span class="acts">${open ? `<button class="ic" data-act="resolve" title="Resolve">${ICON.check}</button>` : `<button class="ic" data-act="reopen" title="Reopen">${ICON.reopen}</button>`}` +
+    `<button class="ic" data-act="delete" title="Delete">${ICON.trash}</button><button class="ic" data-act="close" title="Close (esc)">${ICON.close}</button></span>`;
+  $('#composer .msgs').innerHTML = messages(c).map(m =>
+    `<div class="msg ${m.by}"><div class="who"><span class="av">${m.by === 'claude' ? '✳' : 'Y'}</span>${m.by === 'claude' ? 'Claude' : 'You'}` +
+    `${m.ts ? `<time>${clock(m.ts)}</time>` : ''}</div><div class="txt">${esc(m.text)}</div></div>`).join('');
+  const lastYou = Math.max(...messages(c).filter(m => m.by === 'you').map(m => m.ts || 0));
+  $('#composer .status').innerHTML = !open ? `Resolved${c.resolvedIn ? ` in v${c.resolvedIn}` : ''}`
+    : pending(c) ? (state.listening ? '<span class="dots"><i></i><i></i><i></i></span> Claude is working on it'
+      : 'Sent · no Claude session is listening yet. It will get it when one runs <code>washi watch</code>')
+    : !c.sent || lastYou > c.sent ? `Not sent to Claude · <a href="#" data-send-thread>Send now</a>` : '';
+  $('#composer textarea').placeholder = c.status === 'open' ? 'Reply' : 'Reply to reopen';
+}
+function openThread(cid, e) {
+  composing = null;
+  state.thread = cid;
+  $('#c-send').checked = pref('send', true);
+  $('#composer textarea').value = '';
+  renderThread();
+  const p = e ? { x: e.clientX, y: e.clientY } : null;
+  placePop(p?.x ?? $('#stage').getBoundingClientRect().left + 40, p?.y ?? 80);
+  $('#composer .msgs').scrollTop = 1e6;
 }
 function closeComposer() {
   composing = null;
+  state.thread = null;
   drawDraft(null);
   $('#composer').hidden = true;
 }
 async function saveComment() {
-  const text = $('#composer textarea').value.trim();
+  const text = $('#composer textarea').value.trim(), send = $('#c-send').checked;
+  setPref('send', send);
+  if (state.thread) {
+    if (!text) return;
+    const c = state.comments.find(x => x.id === state.thread);
+    if (c.status !== 'open') await api('/api/comments/reopen', { name: state.name, id: c.id });
+    await api('/api/comments/reply', { name: state.name, id: c.id, text, send, where: where(c) });
+    $('#composer textarea').value = '';
+    await loadComments();
+    draw();
+    renderPanel();
+    renderThread();
+    $('#composer .msgs').scrollTop = 1e6;
+    return;
+  }
   if (!text || !composing) return closeComposer();
-  await api('/api/comments', { name: state.name, text, ...composing });
+  await api('/api/comments', { name: state.name, text, send, where: where(composing), ...composing });
   closeComposer();
   setCommenting(false);
   await loadComments();
   draw();
   renderPanel();
 }
-function showComment(cid) {
+function showComment(cid, e) {
   const c = state.comments.find(x => x.id === cid);
-  if (c?.node) select(c.node, true);
-  const el = panel.querySelector(`[data-cid="${cid}"]`);
-  el?.scrollIntoView({ block: 'center' });
-  el?.classList.add('flash');
-  setTimeout(() => el?.classList.remove('flash'), 1200);
+  if (c?.node) select(c.node, !e);
+  openThread(cid, e);
 }
 function setCommenting(on) {
   state.commenting = on;
@@ -942,10 +1003,31 @@ function setCommenting(on) {
 }
 $('#comment').addEventListener('click', () => setCommenting(!state.commenting));
 $('#c-save').addEventListener('click', saveComment);
-$('#c-cancel').addEventListener('click', () => { closeComposer(); setCommenting(false); });
+$('#c-send').addEventListener('change', e => setPref('send', e.target.checked));
 $('#composer textarea').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) saveComment();
+  if (e.key === 'Enter' && !e.shiftKey && !e.isComposing) { e.preventDefault(); saveComment(); }
   if (e.key === 'Escape') { closeComposer(); setCommenting(false); }
+});
+$('#composer').addEventListener('click', async e => {
+  const act = e.target.closest('[data-act]')?.dataset.act;
+  if (act === 'close') return closeComposer();
+  if (act) {
+    const id = state.thread;
+    if (act === 'delete' && !confirm('Delete this comment and its replies?')) return;
+    await api(`/api/comments/${act}`, { name: state.name, id });
+    await loadComments();
+    draw();
+    renderPanel();
+    return act === 'delete' ? closeComposer() : renderThread();
+  }
+  if (e.target.closest('[data-send-thread]')) {
+    e.preventDefault();
+    const c = state.comments.find(x => x.id === state.thread);
+    await api('/api/comments/send', { name: state.name, items: [{ id: c.id, where: where(c) }] });
+    await loadComments();
+    renderPanel();
+    renderThread();
+  }
 });
 
 // ── chrome ────────────────────────────────────────────────
@@ -1030,18 +1112,16 @@ function renderPanel() {
 
   const open = state.comments.filter(c => c.status === 'open'), done = state.comments.filter(c => c.status !== 'open');
   if (state.comments.length) {
-    state.chatText = ids => `Washi comments on ${state.name} (v${state.rev}):\n` +
-      state.comments.filter(c => ids.includes(c.id)).map(c => `- ${c.id} ${where(c).replace(/^(?!area)/, 'on ')}: ${c.text.replace(/\n+/g, ' ')}`).join('\n');
     const unsent = open.filter(c => !c.sent);
     html += `<h3>Comments · ${open.length} open${unsent.length > 1 ? `<button class="mini h-act primary" data-send="${esc(unsent.map(c => c.id).join(' '))}">Send all to Claude</button>` : ''}</h3><ul class="list">` + open.map(c =>
       `<li class="cm" data-cid="${esc(c.id)}" data-sel="${esc(c.node || '')}"><span class="tag pinno">${esc(c.id.slice(1))}</span>` +
-      `<div class="cm-body">${esc(c.text)}<div class="none">${esc(where(c))} · v${c.version ?? '?'} · ${ago(c.ts)}${c.sent ? ` · <b>sent to Claude ${ago(c.sent)}</b>` : ''}</div></div>` +
-      `<div class="cm-acts">${c.sent ? '' : `<button class="mini primary" data-send="${esc(c.id)}">Send to Claude</button>`}<button class="mini" data-chat="${esc(c.id)}">Copy</button></div></li>`).join('') + '</ul>';
+      `<div class="cm-body">${esc(c.text)}<div class="none">${esc(where(c))} · v${c.version ?? '?'} · ${ago(c.ts)}${pending(c) ? ` · <b>${state.listening ? 'Claude is working on it' : 'sent, waiting for a Claude session'}</b>` : c.sent ? ' · sent to Claude' : ''}${(c.thread || []).length ? ` · ${c.thread.length} repl${c.thread.length === 1 ? 'y' : 'ies'}` : ''}</div></div>` +
+      `<div class="cm-acts">${c.sent ? '' : `<button class="mini primary" data-send="${esc(c.id)}">Send to Claude</button>`}<button class="mini" data-resolve="${esc(c.id)}">Resolve</button><button class="bin" data-delete="${esc(c.id)}" title="Delete">${ICON.trash}</button></div></li>`).join('') + '</ul>';
     if (done.length) {
       html += `<details class="resolved"><summary>${done.length} resolved</summary><ul class="list">` + done.map(c =>
         `<li class="cm" data-sel="${esc(c.node || '')}"><span class="tag removed">${esc(c.id.slice(1))}</span><div class="cm-body">${esc(c.text)}` +
         (c.reply ? `<div class="reply">${esc(c.reply)}</div>` : '') + `<div class="none">${esc(where(c))}${c.resolvedIn ? ` · resolved in v${c.resolvedIn}` : ''}</div></div>` +
-        `<div class="cm-acts"><button class="mini" data-chat="${esc(c.id)}">Copy</button><button class="mini" data-reopen="${esc(c.id)}">Reopen</button></div></li>`).join('') + '</ul></details>';
+        `<div class="cm-acts"><button class="mini" data-reopen="${esc(c.id)}">Reopen</button><button class="bin" data-delete="${esc(c.id)}" title="Delete">${ICON.trash}</button></div></li>`).join('') + '</ul></details>';
     }
   }
 
@@ -1089,17 +1169,6 @@ function issuesHtml(issues) {
 }
 
 panel.addEventListener('click', async e => {
-  const chat = e.target.closest('[data-chat]');
-  if (chat) {
-    const label = chat.textContent;
-    try {
-      await navigator.clipboard.writeText(state.chatText(chat.dataset.chat.split(' ')));
-      chat.textContent = 'Copied · paste in chat';
-    } catch {
-      chat.textContent = 'Failed';
-    }
-    return setTimeout(() => (chat.textContent = label), 1400);
-  }
   const send = e.target.closest('[data-send]');
   if (send) {
     send.disabled = true;
@@ -1108,13 +1177,18 @@ panel.addEventListener('click', async e => {
     await loadComments();
     return renderPanel();
   }
-  const res = e.target.closest('[data-resolve], [data-reopen]');
+  const res = e.target.closest('[data-resolve], [data-reopen], [data-delete]');
   if (res) {
-    await api(res.dataset.resolve ? '/api/comments/resolve' : '/api/comments/reopen', { name: state.name, id: res.dataset.resolve || res.dataset.reopen });
+    const [act, id] = Object.entries(res.dataset)[0];
+    if (act === 'delete' && !confirm('Delete this comment and its replies?')) return;
+    if (act === 'delete' && state.thread === id) closeComposer();
+    await api(`/api/comments/${act}`, { name: state.name, id });
     await loadComments();
     draw();
     return renderPanel();
   }
+  const cm = e.target.closest('li.cm[data-cid]');
+  if (cm) return showComment(cm.dataset.cid);
   const sl = e.target.closest('[data-slice]');
   if (sl) return setSlice(sl.dataset.slice === state.slice ? null : sl.dataset.slice);
   const el = e.target.closest('[data-sel]');

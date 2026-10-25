@@ -26,7 +26,9 @@ A local shaping tool: Claude edits a shape (JSON, fixed language) describing num
 launchctl kickstart -k gui/$(id -u)/com.jacopo.washi   # restart the viewer (after editing washi.py/server.py)
 washi check ~/Projects/x/washi/*.json
 washi comments ~/Projects/x/washi/<slug>.json
+washi reply ~/Projects/x/washi/<slug>.json c3 "Done in v9"   # answer in the thread
 washi reopen ~/Projects/x/washi/<slug>.json c3            # undo a resolve
+washi delete ~/Projects/x/washi/<slug>.json c3            # remove a comment and its thread
 washi relayout ~/Projects/x/washi/<slug>.json [--region R1]  # fresh layout after a restructure
 washi shot x/<slug> --region R2                         # prints PNG path
 washi md <file> [--slice S1]
@@ -40,7 +42,7 @@ washi md <file> [--slice S1]
 - `GET /api/board?name=` → `{board, stale, issues, revs}` — `stale` = file currently invalid, `board` is the last valid version
 - `GET /api/rev?name=&n=` → `{ts, board}` (1-based)
 - `GET /api/export?name=[&slice=S1]` → markdown plan
-- `GET/POST /api/comments`, `POST /api/comments/resolve`, `POST /api/comments/reopen`, `POST /api/relayout`, `POST /api/comments/send` (→ `~/.washi/outbox.jsonl`, tailed by `washi watch`), `GET/POST /api/layout`
+- `GET/POST /api/comments`, `POST /api/comments/resolve`, `POST /api/comments/reopen`, `POST /api/relayout`, `POST /api/comments/send` (→ `~/.washi/outbox.jsonl`, tailed by `washi watch`, which touches `~/.washi/listening` so `/api/state.listening` tells whether a Claude session is reading), `POST /api/comments/reply` and `POST /api/comments` (both take `send: true`), `POST /api/comments/delete`. A comment is a thread: `text`, then `thread: [{by: you|claude, text, ts}]`, `GET/POST /api/layout`
 
 ## Data shape
 

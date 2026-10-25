@@ -139,7 +139,7 @@ class Boards:
             })
         # open tabs reload themselves when the viewer's own files change
         viewer = max(int(f.stat().st_mtime) for f in STATIC.iterdir() if f.is_file())
-        return {"version": version, "viewer": viewer, "dirs": [str(d) for d in self.dirs()], "boards": boards}
+        return {"version": version, "viewer": viewer, "listening": washi.listening(), "dirs": [str(d) for d in self.dirs()], "boards": boards}
 
 
 def make_handler(boards):
@@ -209,8 +209,20 @@ def make_handler(boards):
                     return self.send(400, {"error": "empty comment"})
                 anchor = {k: body.get(k) for k in washi.ANCHOR_KEYS}
                 c = washi.add_comment(path, text, body.get("node"), body.get("x"), body.get("y"), cur["revs"], **anchor)
+                if body.get("send"):
+                    washi.send_comments(path, cur["name"], [{"id": c["id"], "where": body.get("where")}])
                 boards.bump()
                 return self.send(200, c)
+            if u.path == "/api/comments/reply":
+                text = str(body.get("text", "")).strip()
+                if not text:
+                    return self.send(400, {"error": "empty reply"})
+                cid = str(body.get("id", ""))
+                ok = washi.reply_comment(path, cid, text, "you")
+                if ok and body.get("send"):
+                    washi.send_reply(path, cur["name"], cid, text, body.get("where"))
+                boards.bump()
+                return self.send(200 if ok else 404, {"ok": bool(ok)})
             if u.path == "/api/comments/resolve":
                 ok = washi.resolve_comment(path, str(body.get("id", "")), body.get("reply"), cur["revs"])
                 boards.bump()
@@ -224,6 +236,10 @@ def make_handler(boards):
                     washi.relayout(path, body.get("region"))
                 boards.bump()
                 return self.send(200, {"ok": True})
+            if u.path == "/api/comments/delete":
+                ok = washi.delete_comment(path, str(body.get("id", "")))
+                boards.bump()
+                return self.send(200 if ok else 404, {"ok": ok})
             if u.path == "/api/comments/reopen":
                 ok = washi.reopen_comment(path, str(body.get("id", "")))
                 boards.bump()

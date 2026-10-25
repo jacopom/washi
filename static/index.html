@@ -36,10 +36,17 @@
     </svg>
     <div id="banner" hidden></div>
     <div id="empty" hidden></div>
-    <div id="composer" hidden>
+    <div id="composer" class="pop" hidden>
       <div class="on"></div>
-      <textarea rows="3" placeholder="What should change here? (⌘↩ to save)"></textarea>
-      <div class="row"><button id="c-cancel">Cancel</button><button id="c-save" class="primary">Comment</button></div>
+      <div class="msgs"></div>
+      <div class="status"></div>
+      <div class="box">
+        <textarea rows="2" placeholder="Comment, or ask Claude to change something"></textarea>
+        <div class="row">
+          <label class="send"><input type="checkbox" id="c-send"> Send to Claude</label>
+          <button id="c-save" class="go" title="Send (↩) · new line (⇧↩)" aria-label="Send">↑</button>
+        </div>
+      </div>
     </div>
     <div id="bar">
       <button id="fit">Fit</button>
