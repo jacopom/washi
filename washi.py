@@ -480,8 +480,16 @@ def listening():
         return False
 
 
+def _private_dir():
+    # only this user may read or append what reaches Claude
+    OUTBOX.parent.mkdir(mode=0o700, exist_ok=True)
+    OUTBOX.parent.chmod(0o700)
+    OUTBOX.touch(mode=0o600)
+    OUTBOX.chmod(0o600)
+
+
 def _outbox(entries):
-    OUTBOX.parent.mkdir(exist_ok=True)
+    _private_dir()
     with OUTBOX.open("a", encoding="utf-8") as f:
         f.writelines(json.dumps(x, ensure_ascii=False) + "\n" for x in entries)
 
@@ -514,8 +522,7 @@ def send_reply(path, name, cid, text, where=None):
 
 
 def watch():
-    OUTBOX.parent.mkdir(exist_ok=True)
-    OUTBOX.touch()
+    _private_dir()
     with OUTBOX.open(encoding="utf-8") as f:
         f.seek(0, 2)
         while True:

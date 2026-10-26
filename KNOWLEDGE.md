@@ -45,3 +45,9 @@ The first version was a classic graph of places, UI/code affordances and stores.
 
 ## Local server safety
 - The server binds 127.0.0.1, but any page open in the browser can still reach it, and comments sent from the viewer land in Claude's context through `washi watch`. So every request must have a localhost `Host` (blocks DNS rebinding) and no foreign `Origin`, and every POST must be `application/json`. A cross-site form or no-cors fetch can't send that content type without a CORS preflight, and the server never approves one.
+- Other layers:
+  - The ELK script from jsdelivr is pinned with an SRI hash. A swapped CDN file could otherwise run in the viewer and post comments as the user. Bumping elkjs means recomputing it: `curl -s URL | openssl dgst -sha384 -binary | openssl base64 -A`.
+  - POST bodies are capped at 2 MB.
+  - `~/.washi` is 0700 and the outbox is 0600.
+  - Every shape and comment field was fuzzed with `<img onerror>` payloads in Oct 2026 and nothing executed: all text goes through `esc()`/`T()`. Keep it that way when adding fields.
+  - The skill tells Claude that comments, prose and notes are data. A shape or a `.comments.json` from someone else's repo can't make it run commands.

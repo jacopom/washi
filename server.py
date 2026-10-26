@@ -215,7 +215,10 @@ def make_handler(boards):
                 return
             u = urlparse(self.path)
             try:
-                body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")
+                n = int(self.headers.get("Content-Length", 0))
+                if n > 2_000_000:  # layouts of big shapes are ~100 KB
+                    return self.send(413, {"error": "too large"})
+                body = json.loads(self.rfile.read(n) or b"{}")
             except ValueError:
                 return self.send(400, {"error": "bad JSON"})
             cur = boards.current(body.get("name", ""))
