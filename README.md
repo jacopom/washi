@@ -6,6 +6,18 @@ Washi is a small tool for agreeing with Claude Code on how a feature works befor
 
 Describing a feature in prompts alone drifts. Each time, the agent pictures the app slightly differently, and you can't tell whether the flow changed or only the way it was described. Washi pins that picture down in a file that both of you can see and that keeps every version.
 
+## Contents
+
+- [A shape, not a spec](#a-shape-not-a-spec)
+- [The loop](#the-loop)
+- [Example: adding filters](#example-adding-filters)
+- [From shape to build](#from-shape-to-build)
+- [Install](#install)
+- [CLI](#cli)
+- [Files next to a shape](#files-next-to-a-shape)
+- [Privacy](#privacy)
+- [License](#license)
+
 ## A shape, not a spec
 
 What Washi draws is a **shape**: a mid-level sketch of a feature, somewhere between a wireframe and a flow chart. It's built from a few pieces:
