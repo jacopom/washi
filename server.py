@@ -4,7 +4,7 @@
 Watches <root>/*/washi/*.json (plus any extra dirs), snapshots every
 valid change into .history/, stores viewer comments and layout next to each
 shape, and serves the viewer + a small JSON API. Shapes are named
-"<project>/<slug>", e.g. "torrent-box/cineteca"."""
+"<project>/<slug>", e.g. "my-app/onboarding"."""
 import argparse
 import json
 import threading
@@ -164,7 +164,24 @@ def make_handler(boards):
             self.end_headers()
             self.wfile.write(data)
 
+        # The server only listens on 127.0.0.1, but any page open in the browser can still reach it.
+        # Writes end up in Claude's chat via `washi watch`, so: only localhost Host names (no DNS
+        # rebinding), no foreign Origin, and JSON bodies only (a cross-site form or no-cors fetch
+        # can't set that content type without a preflight, which this server never approves).
+        def local(self, write=False):
+            host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+            origin = self.headers.get("Origin")
+            ok = host in ("localhost", "127.0.0.1", "[::1]") and (
+                not origin or urlparse(origin).hostname in ("localhost", "127.0.0.1", "::1"))
+            if ok and write:
+                ok = (self.headers.get("Content-Type") or "").split(";")[0].strip() == "application/json"
+            if not ok:
+                self.send(403, {"error": "local requests only"})
+            return ok
+
         def do_GET(self):
+            if not self.local():
+                return
             u = urlparse(self.path)
             q = parse_qs(u.query)
             if u.path == "/api/state":
@@ -194,6 +211,8 @@ def make_handler(boards):
             return self.send(404, {"error": "unknown endpoint"})
 
         def do_POST(self):
+            if not self.local(write=True):
+                return
             u = urlparse(self.path)
             try:
                 body = json.loads(self.rfile.read(int(self.headers.get("Content-Length", 0))) or b"{}")

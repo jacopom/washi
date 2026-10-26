@@ -11,7 +11,7 @@ You write it in a fixed JSON language; the viewer at http://localhost:4747 rende
 
 ## Setup
 
-- Shapes live in `<project>/washi/<slug>.json`. The viewer watches every `~/Projects/*/washi/` folder at once and runs as a LaunchAgent, so it is normally already up: `curl -s localhost:4747/api/state`. If it's down: `launchctl kickstart -k gui/$(id -u)/com.jacopo.washi` (or `washi serve` in the background).
+- Shapes live in `<project>/washi/<slug>.json`. The viewer watches every `<root>/*/washi/` folder at once (root is usually `~/Projects`) and, after `install.sh` on macOS, runs as a LaunchAgent, so it is normally already up: `curl -s localhost:4747/api/state`. If it's down: `launchctl kickstart -k gui/$(id -u)/dev.washi.viewer` (or `washi serve` in the background).
 - In the viewer and for `washi shot`, a shape is named `<project>/<slug>` (a bare slug works when unambiguous).
 
 ## The language

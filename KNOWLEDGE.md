@@ -42,3 +42,6 @@ The first version was a classic graph of places, UI/code affordances and stores.
 
 ## Dropdowns
 - Never compare `select.innerHTML` with freshly built HTML to skip a rewrite: the browser re-serializes it (`selected=""`), so it never matches. The board list was rebuilt on every 700 ms poll, and a pick made while Chrome's native menu was open got dropped. Compare with the last string written instead (`sel.dataset.html`).
+
+## Local server safety
+- The server binds 127.0.0.1, but any page open in the browser can still reach it, and comments sent from the viewer land in Claude's context through `washi watch`. So every request must have a localhost `Host` (blocks DNS rebinding) and no foreign `Origin`, and every POST must be `application/json`. A cross-site form or no-cors fetch can't send that content type without a CORS preflight, and the server never approves one.

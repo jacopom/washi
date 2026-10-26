@@ -9,7 +9,7 @@ A local shaping tool: Claude edits a shape (JSON, fixed language) describing num
 - `server.py` — stdlib HTTP server. Watches `~/Projects/*/washi/*.json` (+ extra dirs) every 0.4s, snapshots valid changes, serves `static/` and the API. Imports `washi` at start — restart it after changing `washi.py`.
 - `static/` — viewer (vanilla JS, light "paper" theme). Widgets drawn as SVG by `WIDGET` in `app.js`; each region laid out separately with ELK (jsdelivr, pinned 0.9.3), regions packed per row.
 - `skill/SKILL.md` — Claude Code skill: language spec + comments → save → check → look → resolve → report loop. Symlinked to `~/.claude/skills/washi`.
-- `launchd/com.jacopo.washi.plist` — keeps the viewer up on :4747 (installed in `~/Library/LaunchAgents`, log `~/Library/Logs/washi.log`).
+- `install.sh [ROOT]` — links `washi` onto the PATH and the skill into `~/.claude/skills/washi`; on macOS writes the LaunchAgent `dev.washi.viewer` (viewer on :4747 watching `ROOT/*/washi`, log `~/Library/Logs/washi.log`).
 
 ## Files next to a shape
 
@@ -23,7 +23,7 @@ A local shaping tool: Claude edits a shape (JSON, fixed language) describing num
 ## Run
 
 ```bash
-launchctl kickstart -k gui/$(id -u)/com.jacopo.washi   # restart the viewer (after editing washi.py/server.py)
+launchctl kickstart -k gui/$(id -u)/dev.washi.viewer   # restart the viewer (after editing washi.py/server.py)
 washi check ~/Projects/x/washi/*.json
 washi comments ~/Projects/x/washi/<slug>.json
 washi reply ~/Projects/x/washi/<slug>.json c3 "Done in v9"   # answer in the thread
@@ -46,4 +46,4 @@ washi md <file> [--slice S1]
 
 ## Data shape
 
-See `skill/SKILL.md`. Real example: `~/Projects/torrent-box/washi/cineteca.json`.
+See `skill/SKILL.md`. Example: `examples/file-tracker.json` (`washi serve --root "" examples`).

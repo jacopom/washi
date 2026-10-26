@@ -1,0 +1,346 @@
+{
+  "title": "File tracker",
+  "option": "where are my files?",
+  "prose": "A small app that keeps track of where my files are. A file is either on the laptop, ready to open, or only in cloud storage. Bringing one back needs enough free space, and the app says how much is missing when there isn't.\n\nThis is the example from the README: **v1** is the first shape, **v2** adds filtering.",
+  "regions": [
+    {
+      "id": "R1",
+      "title": "Library · where is my file?",
+      "row": 0,
+      "col": 0,
+      "prose": "The home of the app: every file, with where it lives right now."
+    },
+    {
+      "id": "R2",
+      "title": "Getting it back",
+      "row": 0,
+      "col": 1,
+      "prose": "What happens when the file I want is only in the cloud."
+    },
+    {
+      "id": "R3",
+      "title": "Filters · narrow it down",
+      "row": 1,
+      "col": 0,
+      "prose": "Added in v2, from a screenshot of a filter sheet I liked: grouped options, and only values the library actually contains."
+    }
+  ],
+  "nodes": [
+    {
+      "id": "library",
+      "prose": "The first screen: every file I've touched recently, newest first. Search filters the list in place, matching names and folders.\n\nTapping a file opens its page, which says where the file is right now.",
+      "type": "screen",
+      "region": "R1",
+      "caption": "Library",
+      "title": "Files",
+      "widgets": [
+        {
+          "type": "field",
+          "id": "search",
+          "text": "Search files"
+        },
+        {
+          "type": "button",
+          "id": "filters",
+          "text": "Filters"
+        },
+        {
+          "type": "tabs",
+          "id": "chips",
+          "items": [
+            "PDF ×",
+            "In the cloud ×"
+          ]
+        },
+        {
+          "type": "list",
+          "id": "files",
+          "label": "Recent",
+          "items": [
+            "Tax return 2025.pdf",
+            "Trip photos.zip",
+            "Thesis draft.docx",
+            "Invoice 0412.pdf"
+          ]
+        }
+      ],
+      "note": "Search matches names and folders. Chips show active filters.",
+      "question": "Should a filter survive a reload?"
+    },
+    {
+      "id": "file",
+      "prose": "One file. Its status slot is the interesting part: what it shows, and what I can do, depends on whether the file is on the laptop or only in the cloud.",
+      "type": "screen",
+      "region": "R1",
+      "caption": "File",
+      "title": "Tax return 2025.pdf",
+      "widgets": [
+        {
+          "type": "text",
+          "text": "PDF · 3.2 MB · edited 2 days ago"
+        },
+        {
+          "type": "slot",
+          "id": "status",
+          "text": "Status: depends on where the file is"
+        },
+        {
+          "type": "button",
+          "id": "back",
+          "text": "Back"
+        }
+      ]
+    },
+    {
+      "id": "where",
+      "prose": "Decided from the sync index, not by touching the disk, so the page opens instantly even for large libraries.",
+      "type": "decision",
+      "region": "R1",
+      "text": "where is it?"
+    },
+    {
+      "id": "on-laptop",
+      "type": "cutout",
+      "region": "R1",
+      "caption": "Status · on the laptop",
+      "widgets": [
+        {
+          "type": "text",
+          "text": "On this laptop"
+        },
+        {
+          "type": "button",
+          "id": "open",
+          "text": "Open",
+          "primary": true
+        }
+      ]
+    },
+    {
+      "id": "in-cloud",
+      "type": "cutout",
+      "region": "R1",
+      "caption": "Status · in the cloud",
+      "widgets": [
+        {
+          "type": "text",
+          "text": "Only in cloud storage"
+        },
+        {
+          "type": "button",
+          "id": "fetch",
+          "text": "Bring it back",
+          "primary": true
+        }
+      ]
+    },
+    {
+      "id": "open-app",
+      "type": "step",
+      "region": "R1",
+      "text": "open it in its default app"
+    },
+    {
+      "id": "space",
+      "prose": "Checked against the file's size plus a safety margin, so a download never fills the disk completely.",
+      "type": "decision",
+      "region": "R2",
+      "text": "enough free space?"
+    },
+    {
+      "id": "download",
+      "type": "step",
+      "region": "R2",
+      "text": "download it to the laptop"
+    },
+    {
+      "id": "downloading",
+      "type": "cutout",
+      "region": "R2",
+      "caption": "Status · coming down",
+      "widgets": [
+        {
+          "type": "progress",
+          "label": "Downloading",
+          "value": 0.6
+        },
+        {
+          "type": "button",
+          "id": "cancel",
+          "text": "Cancel"
+        }
+      ]
+    },
+    {
+      "id": "no-space",
+      "prose": "Says exactly how much is missing instead of a generic error, and points to the system storage settings.",
+      "type": "cutout",
+      "region": "R2",
+      "caption": "Status · no room",
+      "widgets": [
+        {
+          "type": "text",
+          "text": "2.4 GB more free space needed"
+        },
+        {
+          "type": "button",
+          "id": "manage",
+          "text": "Manage storage"
+        }
+      ],
+      "question": "Offer to free space by sending other files to the cloud?"
+    },
+    {
+      "id": "storage",
+      "type": "step",
+      "region": "R2",
+      "text": "open the system storage settings"
+    },
+    {
+      "id": "sheet",
+      "prose": "Grouped options in a sheet, with the result count on the main button so I know before applying whether anything will be left.",
+      "type": "screen",
+      "region": "R3",
+      "caption": "Filter sheet",
+      "title": "Filters",
+      "widgets": [
+        {
+          "type": "select",
+          "id": "kind",
+          "label": "Kind",
+          "value": "PDF"
+        },
+        {
+          "type": "select",
+          "id": "where-f",
+          "label": "Where",
+          "value": "In the cloud"
+        },
+        {
+          "type": "toggle",
+          "label": "Edited this month"
+        },
+        {
+          "type": "button",
+          "id": "apply",
+          "text": "Show 12 files",
+          "primary": true
+        },
+        {
+          "type": "button",
+          "id": "clear",
+          "text": "Clear all"
+        }
+      ],
+      "note": "The count updates as options change."
+    },
+    {
+      "id": "picker",
+      "prose": "Only offers values the library actually contains, each with its count. A kind with no files never appears.",
+      "type": "cutout",
+      "region": "R3",
+      "caption": "Picker · Kind",
+      "widgets": [
+        {
+          "type": "list",
+          "id": "values",
+          "items": [
+            "PDF (14)",
+            "Images (32)",
+            "Documents (9)"
+          ]
+        }
+      ],
+      "note": "Only kinds the library contains, with counts."
+    }
+  ],
+  "flows": [
+    {
+      "from": "library.search",
+      "to": "library",
+      "label": "filters the list"
+    },
+    {
+      "from": "library.files",
+      "to": "file",
+      "label": "click"
+    },
+    {
+      "from": "file.status",
+      "to": "where"
+    },
+    {
+      "from": "file.back",
+      "to": "library"
+    },
+    {
+      "from": "where",
+      "to": "on-laptop",
+      "label": "on the laptop"
+    },
+    {
+      "from": "where",
+      "to": "in-cloud",
+      "label": "in the cloud"
+    },
+    {
+      "from": "on-laptop.open",
+      "to": "open-app"
+    },
+    {
+      "from": "in-cloud.fetch",
+      "to": "space"
+    },
+    {
+      "from": "space",
+      "to": "download",
+      "label": "yes"
+    },
+    {
+      "from": "space",
+      "to": "no-space",
+      "label": "no"
+    },
+    {
+      "from": "download",
+      "to": "downloading"
+    },
+    {
+      "from": "no-space.manage",
+      "to": "storage"
+    },
+    {
+      "from": "downloading.cancel",
+      "to": "in-cloud",
+      "label": "click"
+    },
+    {
+      "from": "library.filters",
+      "to": "sheet",
+      "label": "click"
+    },
+    {
+      "from": "library.chips",
+      "to": "library",
+      "label": "removes a filter"
+    },
+    {
+      "from": "sheet.kind",
+      "to": "picker"
+    },
+    {
+      "from": "picker.values",
+      "to": "sheet",
+      "label": "pick"
+    },
+    {
+      "from": "sheet.apply",
+      "to": "library"
+    },
+    {
+      "from": "sheet.clear",
+      "to": "sheet",
+      "label": "resets"
+    }
+  ]
+}

@@ -1,0 +1,82 @@
+{
+  "positions": {
+    "library": {
+      "x": 24,
+      "y": 26
+    },
+    "file": {
+      "x": 535,
+      "y": 175
+    },
+    "where": {
+      "x": 851,
+      "y": 182
+    },
+    "on-laptop": {
+      "x": 1069,
+      "y": 65
+    },
+    "in-cloud": {
+      "x": 1062,
+      "y": 178
+    },
+    "open-app": {
+      "x": 1355,
+      "y": 111
+    },
+    "back--file.back--library": {
+      "x": 851,
+      "y": 282
+    },
+    "exit--in-cloud.fetch--space": {
+      "x": 1355,
+      "y": 230
+    },
+    "exit--library.filters--sheet": {
+      "x": 535,
+      "y": 107
+    },
+    "space": {
+      "x": 24,
+      "y": 71
+    },
+    "download": {
+      "x": 214,
+      "y": 81
+    },
+    "downloading": {
+      "x": 479,
+      "y": 26
+    },
+    "no-space": {
+      "x": 193,
+      "y": 140
+    },
+    "storage": {
+      "x": 479,
+      "y": 179
+    },
+    "exit--downloading.cancel--in-cloud": {
+      "x": 795,
+      "y": 87
+    },
+    "sheet": {
+      "x": 24,
+      "y": 26
+    },
+    "picker": {
+      "x": 464,
+      "y": 41
+    },
+    "back--picker.values--sheet": {
+      "x": 777,
+      "y": 91
+    },
+    "exit--sheet.apply--library": {
+      "x": 464,
+      "y": 191
+    }
+  },
+  "clipped": [],
+  "version": 2
+}
